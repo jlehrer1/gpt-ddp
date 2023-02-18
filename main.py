@@ -11,9 +11,9 @@ from gptlightning import SampleTextGenerationCallback
 from gptlightning.data import AutoRegressiveTextSampler
 from gptlightning.lightning_model import GPT
 
-context_length = 4
-batch_size = 2
-num_workers = 0
+context_length = 128
+batch_size = 16
+num_workers = 8
 
 device = "gpu" if torch.cuda.is_available() else None
 
@@ -26,8 +26,8 @@ with open("validation_data.txt") as f:
     valtext = f.read()
 
 print("Splitting text")
-traintext = traintext[0:1000].split(" ")
-valtext = valtext[0:1000].split(" ")
+traintext = traintext.split(" ")
+valtext = valtext.split(" ")
 
 print("Generating tokenizer")
 tokenizer = AutoTokenizer.from_pretrained("gpt2")

@@ -20,8 +20,6 @@ class SampleTextGenerationCallback(Callback):
         self.new_tokens = new_tokens
         self.log_wandb = log_wandb
         
-        if self.log_wandb:
-            self.text_table = wandb.Table(columns=["epoch", "text"])
         os.makedirs(write_path, exist_ok=True)
 
     def on_validation_epoch_end(self, trainer: "pl.Trainer", pl_module: "pl.LightningModule") -> None:
@@ -48,5 +46,6 @@ class SampleTextGenerationCallback(Callback):
                         f.write(f"{word} ")
 
             if self.log_wandb:
-                self.text_table.add_data(curr_epoch, ' '.join(text[0: 100]))
-                wandb.log({"Text Generation (No Prompt)": self.text_table})
+                table = wandb.Table(columns=["epoch", "text"])
+                table.add_data(curr_epoch, ' '.join(text[0: 100]))
+                wandb.log({"Text Generation (No Prompt)": table})
