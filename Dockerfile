@@ -25,6 +25,7 @@ RUN pip install 'matplotlib<3.7' \
     plotly \
     scipy \
     scikit-misc \
-    datasets
+    datasets \
+    transformers
 
 COPY . .

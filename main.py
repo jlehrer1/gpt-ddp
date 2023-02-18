@@ -6,9 +6,10 @@ from transformers import AutoTokenizer
 from gptlightning.lightning_model import GPT
 from torch.optim import Adam
 from functools import partial
+from pytorch_lightning.loggers import WandbLogger
 
-context_length = 32
-batch_size = 4
+context_length = 4
+batch_size = 2
 num_workers = 0
 
 device = "gpu" if torch.cuda.is_available() else None
@@ -21,11 +22,14 @@ with open('training_data.txt') as f:
 with open('validation_data.txt') as f:
     valtext = f.read()
 
-traintext = traintext.split(' ')
-valtext = valtext.split(' ')
+print('Splitting text')
+traintext = traintext[0: 1000].split(' ')
+valtext = valtext[0: 1000].split(' ')
 
+print('Generating tokenizer')
 tokenizer = AutoTokenizer.from_pretrained('gpt2')
 
+print('Setting up datasets')
 traindata = AutoRegressiveTextSampler(
     text=traintext,
     context_length=context_length,
@@ -41,6 +45,7 @@ valdata = AutoRegressiveTextSampler(
 trainloader = DataLoader(traindata, batch_size=batch_size, num_workers=num_workers)
 valloader = DataLoader(valdata, batch_size=batch_size, num_workers=num_workers)
 
+print('Setting up model')
 model = GPT(
     optimizer=partial(
         Adam, lr=3e-4,
@@ -52,6 +57,11 @@ trainer = pl.Trainer(
     accelerator=device,
     devices=1 if device == "gpu" else None,
     max_epochs=10,
+    logger=WandbLogger(
+        name="GPT First Pass",
+        project="Language Modeling"
+    )
 )
 
-trainer.fit(trainloader, valloader)
+print('Beginning training phase')
+trainer.fit(model, trainloader, valloader)

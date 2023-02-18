@@ -1,19 +1,19 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: run-name
+  name: gpt-model
 spec:
   backoffLimit: 1
   completions: 1
   template:
     metadata:
       labels:
-        k8s-app: run-name
+        k8s-app: gpt-model
     spec:
       restartPolicy: Never
       containers:
-      - name: run-name
-        image: ${DOCKERHUBID}/${CONTAINER}
+      - name: gpt-model
+        image: jmlehrer/gpt
         command: ["stdbuf", "-i0", "-o0", "-e0", "bash", "-c"]
         env:
         - name: PYTHONUNBUFFERED

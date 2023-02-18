@@ -15,8 +15,8 @@ class GPT(pl.LightningModule):
         vocab_size: int = 50304,
         n_blocks: int = 6, 
         n_heads: int = 4, 
-        n_embd: int = 128, 
-        block_size: int = 256,
+        n_embd: int = 64, 
+        block_size: int = 64,
         dropout: float = 0.0,
     ) -> None:
         super().__init__()
@@ -48,11 +48,13 @@ class GPT(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         loss = self._step(batch)
 
+        self.log("train_loss", loss)
         return loss
 
     def validation_step(self, batch, batch_idx):
         loss = self._step(batch)
 
+        self.log("val_loss", loss)
         return loss
 
     def configure_optimizers(self):

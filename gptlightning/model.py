@@ -11,11 +11,11 @@ class SelfAttentionHead(nn.Module):
         self.query = nn.Linear(n_embd, head_size, bias=False)
         self.value = nn.Linear(n_embd, head_size, bias=False)
 
+        # dont register as attribute / in gradient graph
         self.register_buffer("tril", torch.tril(torch.ones(block_size, block_size)))
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        B, T, C = x.shape
-
+        _, T, C = x.shape   
         k = self.key(x)
         q = self.query(x)
 
@@ -25,9 +25,10 @@ class SelfAttentionHead(nn.Module):
         # masking out "future values" in between each matmul
         # makes this a decoder block
         affinity = affinity.masked_fill(self.tril[:T, :T] == 0, float("-inf"))
-        affinity = F.softmax(affinity)
+        affinity = F.softmax(affinity, dim=-1)
 
-        x = affinity @ self.value(x)
+        v = self.value(x)
+        x = affinity @ v
 
         return x
 
@@ -40,7 +41,8 @@ class MultiHeadAttention(nn.Module):
         self.projection = nn.Linear(n_embd, n_embd)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x = torch.concat(self.heads(x), dim=-1)
+        # concat along channel dim of (B, T, C) Tensors
+        x = torch.concat([head(x) for head in self.heads], dim=-1)
         x = self.projection(x)
 
         return x
@@ -49,12 +51,12 @@ class MultiHeadAttention(nn.Module):
 class DecoderBlock(nn.Module):
     def __init__(self, n_heads: int, n_embd: int, block_size: int, dropout: float) -> None:
         super().__init__()
-        self.head_size = n_embd // n_heads
-        self.attention = MultiHeadAttention(n_heads, n_embd, self.head_size, block_size)
+        head_size = n_embd // n_heads
+        self.attention = MultiHeadAttention(n_heads, n_embd, head_size, block_size)
 
         # feedforward section
-        # multiplier is recommended from attention is all you need paper
-        # for inner matrix
+        # multiplier of 4 is recommended from attention is all you need paper
+        # for inner matrix :shrug:
         self.ff = nn.Sequential(
             nn.Linear(n_embd, 4 * n_embd), nn.ReLU(), nn.Linear(4 * n_embd, n_embd), nn.Dropout(dropout)
         )
@@ -64,9 +66,8 @@ class DecoderBlock(nn.Module):
         self.ln2 = nn.LayerNorm(n_embd)
 
     def forward(self, x):
-        x = x + self.attention(nn.ln1(x))
+        x = x + self.attention(self.ln1(x))
         x = x + self.ff(self.ln2(x))
-        x = self.relu(x)
 
         return x
 
@@ -84,8 +85,8 @@ class GPTModel(nn.Module):
         self.token_embedding = nn.Embedding(vocab_size, n_embd)
         self.positional_embedding = nn.Embedding(block_size, n_embd)
         self.blocks = nn.Sequential(
-            DecoderBlock(n_embd=n_embd, n_heads=n_heads, block_size=block_size, dropout=dropout)
-            for _ in range(n_blocks)
+            *[DecoderBlock(n_embd=n_embd, n_heads=n_heads, block_size=block_size, dropout=dropout)
+            for _ in range(n_blocks)]
         )
         self.ln = nn.LayerNorm(n_embd)
         self.head = nn.Linear(n_embd, vocab_size)
@@ -100,12 +101,4 @@ class GPTModel(nn.Module):
         x = self.ln(x)
         logits = self.head(x)
 
-        if targets is None:
-            loss = None
-        else:
-            B, T, C = logits.shape
-            logits = logits.view(B * T, C)
-            targets = targets.view(B * T)
-            loss = F.cross_entropy(logits, targets)
-
-        return logits, loss
+        return logits

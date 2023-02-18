@@ -1,2 +1,6 @@
 *.ipynb
 *.txt
+wandbcreds
+**/__pycache__/*
+wandb/*
+Language*
