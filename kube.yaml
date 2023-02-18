@@ -1,0 +1,82 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: run-name
+spec:
+  backoffLimit: 1
+  completions: 1
+  template:
+    metadata:
+      labels:
+        k8s-app: run-name
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: run-name
+        image: ${DOCKERHUBID}/${CONTAINER}
+        command: ["stdbuf", "-i0", "-o0", "-e0", "bash", "-c"]
+        env:
+        - name: PYTHONUNBUFFERED
+          value: "1"
+        args: [
+          "wandb login --relogin $(cat wandbcreds) && \
+          python main.py"
+        ]
+        resources:
+          limits:
+            memory: 128Gi
+            cpu: "16"
+            nvidia.com/gpu: "1"
+          requests:
+            memory: 32Gi
+            cpu: "16"
+            nvidia.com/gpu: "1"
+        volumeMounts:
+        - name: ephemeral
+          mountPath: "/data"
+        # SystemV shared memory
+        - name: "dshm"
+          mountPath: "/dev/shm"
+      volumes:
+      # Ephemeral storage
+      - name: ephemeral
+        emptyDir: {}
+      - name: dshm
+        emptyDir:
+          medium: Memory
+      tolerations:
+        - key: "nautilus.io/chase-ci"
+          operator: "Equal"
+          value: "true"
+          effect: "NoSchedule"
+      # affinity:
+      #   nodeAffinity:
+      #     requiredDuringSchedulingIgnoredDuringExecution:
+      #       nodeSelectorTerms:
+      #       - matchExpressions:
+      #         # GPU runs only
+      #         - key: nvidia.com/gpu.product
+      #           operator: In
+      #           values:
+      #             - NVIDIA-GeForce-RTX-3090
+      #             - NVIDIA-GeForce-RTX-3090
+      #             - NVIDIA-TITAN-RTX
+      #             - NVIDIA-RTX-A5000
+      #             - Quadro-RTX-6000
+      #             - Tesla-V100-SXM2-32GB
+      #             - NVIDIA-A40
+      #             - NVIDIA-RTX-A6000
+      #             - Quadro-RTX-8000
+      #             - NVIDIA-A10
+      #         - key: nvidia.com/gpu.product
+      #           operator: NotIn
+      #           values:
+      #           - NVIDIA-GeForce-GTX-1070
+      #           - NVIDIA-GeForce-GTX-1080
+      #           - Quadro-M4000
+      #           - NVIDIA-A100-PCIE-40GB-MIG-2g.10gb
+      #           - NVIDIA-GeForce-GTX-1080-Ti
+      #           - NVIDIA-GeForce-RTX-2080-Ti
+      #           - NVIDIA-TITAN-Xp
+      #           - Tesla-T4
+      #         # Host blacklist

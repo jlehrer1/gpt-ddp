@@ -1,9 +1,9 @@
 import torch 
 import pytorch_lightning as pl
 from torch.utils.data import DataLoader
-from .data import AutoRegressiveTextSampler
+from gptlightning.data import AutoRegressiveTextSampler
 from transformers import AutoTokenizer
-from .lightning_model import GPT
+from gptlightning.lightning_model import GPT
 from torch.optim import Adam
 from functools import partial
 
