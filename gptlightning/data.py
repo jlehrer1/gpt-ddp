@@ -1,7 +1,7 @@
-from torch.utils.data import Dataset
-import transformers
 import numpy as np
 import torch
+import transformers
+from torch.utils.data import Dataset
 
 
 class AutoRegressiveTextSampler(Dataset):
