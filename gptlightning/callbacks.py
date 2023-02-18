@@ -49,3 +49,4 @@ class SampleTextGenerationCallback(Callback):
 
             if self.log_wandb:
                 self.text_table.add_data(curr_epoch, ' '.join(text[0: 100]))
+                wandb.log({"Text Generation (No Prompt)": self.text_table})

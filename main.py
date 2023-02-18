@@ -64,7 +64,7 @@ trainer = pl.Trainer(
     devices=1 if device == "gpu" else None,
     max_epochs=500,
     logger=WandbLogger(name="GPT First Pass", project="Language Modeling"),
-    callbacks=[SampleTextGenerationCallback(every_n_epochs=1, context_length=context_length)],
+    callbacks=[SampleTextGenerationCallback(every_n_epochs=1, context_length=context_length, log_wandb=True)],
 )
 
 print("Beginning training phase")
