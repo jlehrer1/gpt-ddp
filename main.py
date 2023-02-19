@@ -11,9 +11,9 @@ from gptlightning import SampleTextGenerationCallback
 from gptlightning.data import AutoRegressiveTextSampler
 from gptlightning.lightning_model import GPT
 
-context_length = 128
-batch_size = 48
-num_workers = 8
+context_length = 1024
+batch_size = 24
+num_workers = 32
 
 device = "gpu" if torch.cuda.is_available() else None
 
@@ -63,7 +63,7 @@ trainer = pl.Trainer(
     accelerator=device,
     devices=1 if device == "gpu" else None,
     max_epochs=500,
-    logger=WandbLogger(name="GPT First Pass", project="Language Modeling"),
+    logger=WandbLogger(name="GPT (Context Length 1024)", project="Language Modeling"),
     callbacks=[SampleTextGenerationCallback(every_n_epochs=1, log_wandb=True)],
 )
 

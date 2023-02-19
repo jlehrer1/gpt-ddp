@@ -115,7 +115,7 @@ class GPTModel(nn.Module):
         B, T = x.shape
 
         tok_emb = self.token_embedding(x)
-        pos_emb = self.positional_embedding(torch.arange(T).to(device))
+        pos_emb = self.positional_embedding(torch.arange(T).to(x.device))
         x = tok_emb + pos_emb
         x = self.blocks(x)
         x = self.ln(x)
