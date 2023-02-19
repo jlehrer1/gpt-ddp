@@ -13,7 +13,8 @@ class SampleTextGenerationCallback(Callback):
     def __init__(
         self,
         write_path: str = "./sample_output",
-        every_n_epochs: int = 4,
+        every_n_epochs: int = 1,
+        every_n_batches: int = None,
         prompt: str = None,
         new_tokens: int = 1000,
         log_wandb: bool = False,
@@ -21,51 +22,63 @@ class SampleTextGenerationCallback(Callback):
         super().__init__()
         self.write_path = write_path
         self.every_n_epochs = every_n_epochs
+        self.every_n_batches = every_n_batches
+
         self.prompt = prompt
         self.new_tokens = new_tokens
         self.log_wandb = log_wandb
 
         os.makedirs(write_path, exist_ok=True)
 
-    def on_validation_epoch_end(
-        self,
-        trainer: pl.Trainer,
-        pl_module: pl.LightningModule,
-    ) -> None:
+    def _sample_output_from_prompt(self, pl_module: pl.LightningModule, epoch: int, step: int):
+        prompt = torch.zeros((1, 1), dtype=torch.long) if self.prompt is None else self.prompt
+        text = pl_module.base_model.generate(
+            prompt,
+            max_new_tokens=self.new_tokens,
+        )
+        # just for writing purposes
+        text = text.split(" ")
+
+        with open(
+            os.path.join(
+                self.write_path,
+                f"epoch_{epoch}_step_{step}_sample_output.txt",
+            ),
+            "w",
+        ) as f:
+            for idx, word in enumerate(text):
+                # write a newline every ten words to make the output
+                # more human readable
+                if idx % 10 == 0:
+                    f.write(f"{word} \n")
+                else:
+                    f.write(f"{word} ")
+
+        if self.log_wandb:
+            table = wandb.Table(columns=["epoch", "step", "text"])
+            table.add_data(epoch, step, " ".join(text))
+            wandb.log({"Text Generation (No Prompt)": table})
+
+    def on_train_epoch_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule) -> None:
         curr_epoch = pl_module.current_epoch
+        step = pl_module.global_step
 
         if curr_epoch % self.every_n_epochs == 0:
             # generate writing sample just from "empty" prompt
-            prompt = torch.zeros((1, 1), dtype=torch.long) if self.prompt is None else self.prompt
-            text = pl_module.base_model.generate(
-                prompt,
-                max_new_tokens=self.new_tokens,
-            )
-            # just for writing purposes
-            text = text.split(" ")
+            self._sample_output_from_prompt(pl_module=pl_module, epoch=curr_epoch, step=step)
 
-            with open(
-                os.path.join(
-                    self.write_path,
-                    f"epoch_{curr_epoch}_sample_output.txt",
-                ),
-                "w",
-            ) as f:
-                for idx, word in enumerate(text):
-                    # write a newline every ten words to make the output
-                    # more human readable
-                    if idx % 10 == 0:
-                        f.write(f"{word} \n")
-                    else:
-                        f.write(f"{word} ")
-
-            if self.log_wandb:
-                table = wandb.Table(columns=["epoch", "text"])
-                table.add_data(
-                    curr_epoch,
-                    " ".join(text[0:100]),
-                )
-                wandb.log({"Text Generation (No Prompt)": table})
+    def on_train_batch_end(
+        self,
+        trainer: "pl.Trainer",
+        pl_module: "pl.LightningModule",
+        outputs: torch.Tensor,
+        batch: Any,
+        batch_idx: int,
+        unused: int = 0,
+    ) -> None:
+        if batch_idx % self.every_n_batches == 0:
+            epoch = pl_module.current_epoch
+            self._sample_output_from_prompt(pl_module=pl_module, epoch=epoch, step=batch_idx)
 
 
 class UploadCheckpointToS3(pl.callbacks.Callback):

@@ -20,7 +20,7 @@ spec:
           value: "1"
         args: [
           "wandb login --relogin $(cat wandbcreds) && \
-          python main.py --context-length=${CONTEXTLENGTH} --batch-size=${BATCHSIZE} --name=${CONTEXTLENGTH} --num-workers=32"
+          python main.py --context-length=${CONTEXTLENGTH} --batch-size=${BATCHSIZE} --name=${CONTEXTLENGTH}-with-sample-output --num-workers=32"
         ]
         resources:
           limits:

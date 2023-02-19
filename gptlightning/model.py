@@ -145,7 +145,7 @@ class GPTModel(nn.Module):
             ]
         )
         self.ln = nn.LayerNorm(n_embd)
-        self.head = nn.Linear(n_embd, vocab_size)
+        self.head = nn.Linear(n_embd, vocab_size, bias=False)
 
         self.tokenizer = tokenizer
 
@@ -161,7 +161,8 @@ class GPTModel(nn.Module):
 
         return logits
 
-    def generate(self, prompt, max_new_tokens):
+    @torch.no_grad()
+    def generate(self, prompt: torch.Tensor, max_new_tokens: int, temperature: float = 1.0, sample_tokens: bool = False):
         if not torch.is_tensor(prompt):
             try:
                 # cast to tensor and make a batch dim
@@ -172,23 +173,34 @@ class GPTModel(nn.Module):
                 )
 
         prompt = prompt.to(device)
-        # prompt is (B, T) array of indices in the current context
+
+        # Move model to eval() mode if needed
+        # and cache state to set it back after generating tokens
+        was_training = False
+        if self.training:
+            was_training = True
+            self.eval()
+
         for _ in range(max_new_tokens):
-            # crop prompt to the last context_length tokens
             prompt_cond = prompt[:, -self.context_length :]
-            # get the predictions
             logits = self(prompt_cond)
+
             # focus only on the last time step
-            logits = logits[:, -1, :]  # becomes (B, C)
-            # apply softmax to get probabilities
-            probs = F.softmax(logits, dim=-1)  # (B, C)
-            # sample from the distribution
-            prompt_next = torch.multinomial(probs, num_samples=1)  # (B, 1)
-            # append sampled index to the running sequence
-            prompt = torch.cat((prompt, prompt_next), dim=1)  # (B, T+1)
+            logits = logits[:, -1, :] / temperature  # becomes (1, context_length, C) -> (1, C)
+            probs = F.softmax(logits, dim=-1)
+
+            if sample_tokens:
+                prompt_next = torch.multinomial(probs, num_samples=1)  # (1, 1)
+            else:
+                _, prompt_next = torch.topk(probs, k=1, dim=-1)
+
+            prompt = torch.cat((prompt, prompt_next), dim=1)  # (1, T+1)
 
         if self.tokenizer is not None:
             # remove the batch dim for decoding
             prompt = self.tokenizer.decode(prompt.cpu().squeeze())
+
+        if was_training:
+            self.train()
 
         return prompt

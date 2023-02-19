@@ -11,8 +11,8 @@ from .model import GPTModel
 class GPT(pl.LightningModule):
     def __init__(
         self,
-        optimizer: Union[Type[nn.Module], partial],
-        scheduler: Union[Type[nn.Module], partial] = None,
+        optimizer: Union[Type[nn.Module], partial(nn.Module)],
+        scheduler: Union[Type[nn.Module], partial(nn.Module)] = None,
         vocab_size: int = 50304,
         n_blocks: int = 6,
         n_heads: int = 4,
