@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+device = "cuda:0" if torch.cuda.is_available() else "cpu"
 
 class SelfAttentionHead(nn.Module):
     def __init__(self, n_embd: int, head_size: int, context_length: int) -> None:
@@ -114,7 +115,7 @@ class GPTModel(nn.Module):
         B, T = x.shape
 
         tok_emb = self.token_embedding(x)
-        pos_emb = self.positional_embedding(torch.arange(T))
+        pos_emb = self.positional_embedding(torch.arange(T).to(device))
         x = tok_emb + pos_emb
         x = self.blocks(x)
         x = self.ln(x)
@@ -122,20 +123,21 @@ class GPTModel(nn.Module):
 
         return logits
 
-    def generate(self, prompt, max_new_tokens, context_length):
+    def generate(self, prompt, max_new_tokens):
         if not torch.is_tensor(prompt):
             try:
                 # cast to tensor and make a batch dim
-                prompt = torch.tensor(self.tokenizer(prompt)).unsqueeze(0)
+                prompt = torch.tensor(self.tokenizer.encode(prompt)).unsqueeze(0)
             except AttributeError:
                 raise RuntimeError(
                     f"Prompt input is not tokenized and tokenizer was not provided to {self.__class__.__name__}. Either provide integer input or provide tokenizer to model initialization."
                 )
 
+        prompt = prompt.to(device)
         # prompt is (B, T) array of indices in the current context
         for _ in range(max_new_tokens):
             # crop prompt to the last context_length tokens
-            prompt_cond = prompt[:, -context_length:]
+            prompt_cond = prompt[:, -self.context_length:]
             # get the predictions
             logits = self(prompt_cond)
             # focus only on the last time step
@@ -149,6 +151,6 @@ class GPTModel(nn.Module):
 
         if self.tokenizer is not None:
             # remove the batch dim for decoding
-            prompt = self.tokenizer.decode(prompt.squeeze())
+            prompt = self.tokenizer.decode(prompt.cpu().squeeze())
 
         return prompt

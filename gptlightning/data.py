@@ -6,28 +6,26 @@ from torch.utils.data import Dataset
 
 class AutoRegressiveTextSampler(Dataset):
     def __init__(
-        self,
-        text: list[str],
+        self, 
+        text: list[str], 
         context_length: int,
         tokenizer: transformers.PreTrainedTokenizer,
+        padding: int = 2,
     ):
         self.text = text
-        self.context_length = context_length
-        self.tokenizer = tokenizer
-
-        self.num_samples = len(text)
+        self.context_length = context_length 
+        self.tokenizer = tokenizer 
+        self.padding = padding
 
     def __getitem__(self, idx):
-        rand_idx = np.random.randint(self.num_samples - self.context_length)
-        r = rand_idx + self.context_length
-
-        data = "".join(self.text[rand_idx : r + 2])
-        encoded = self.tokenizer(data)["input_ids"][: self.context_length + 1]
+        data = " ".join(self.text[idx : idx + self.context_length + self.padding])
+        encoded = self.tokenizer.encode(data)
 
         X = encoded[0 : self.context_length]
         Y = encoded[1 : self.context_length + 1]
-
+        
+        assert len(X) == len(Y)
         return torch.tensor(X), torch.tensor(Y)
 
     def __len__(self):
-        return len(self.text)
+        return len(self.text) - self.context_length

@@ -3,33 +3,36 @@ import os
 import torch
 from pytorch_lightning.callbacks import Callback
 import wandb
+import pytorch_lightning as pl
 
 class SampleTextGenerationCallback(Callback):
     def __init__(
         self,
         context_length: int,
-        write_path="./sample_output",
+        write_path: str = "./sample_output",
         every_n_epochs: int = 4,
-        new_tokens=1000,
+        prompt: str = None,
+        new_tokens: int = 1000,
         log_wandb: bool = False,
     ) -> None:
         super().__init__()
         self.context_length = context_length
         self.write_path = write_path
         self.every_n_epochs = every_n_epochs
+        self.prompt = prompt
         self.new_tokens = new_tokens
         self.log_wandb = log_wandb
         
         os.makedirs(write_path, exist_ok=True)
 
-    def on_validation_epoch_end(self, trainer: "pl.Trainer", pl_module: "pl.LightningModule") -> None:
+    def on_validation_epoch_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule) -> None:
         curr_epoch = pl_module.current_epoch
 
         if curr_epoch % self.every_n_epochs == 0:
             # generate writing sample just from "empty" prompt
-            context = torch.zeros((1, 1), dtype=torch.long)
+            prompt = torch.zeros((1, 1), dtype=torch.long) if self.prompt is not None else self.prompt
             text = pl_module.base_model.generate(
-                context,
+                prompt,
                 max_new_tokens=self.new_tokens,
                 context_length=self.context_length,
             )

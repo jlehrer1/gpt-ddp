@@ -28,4 +28,8 @@ RUN pip install 'matplotlib<3.7' \
     datasets \
     transformers
 
-COPY . .
+COPY 'training_data.txt' .
+COPY 'validation_data.txt' .
+COPY main.py .
+COPY gptlightning gptlightning
+COPY wandbcreds .

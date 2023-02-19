@@ -12,7 +12,7 @@ from gptlightning.data import AutoRegressiveTextSampler
 from gptlightning.lightning_model import GPT
 
 context_length = 128
-batch_size = 16
+batch_size = 48
 num_workers = 8
 
 device = "gpu" if torch.cuda.is_available() else None
