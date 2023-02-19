@@ -2,10 +2,13 @@ from functools import partial
 from typing import Type, Union
 
 import pytorch_lightning as pl
+import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
 from .model import GPTModel
+
+device = "cuda" if torch.cuda.is_available() else "cpu"
 
 
 class GPT(pl.LightningModule):
@@ -83,3 +86,47 @@ class GPT(pl.LightningModule):
             optims["scheduler"] = scheduler
 
         return optims
+
+    @torch.no_grad()
+    def generate(self, prompt: torch.Tensor, max_new_tokens: int, temperature: float = 0.8, sample_tokens: bool = False):
+        if not torch.is_tensor(prompt):
+            try:
+                # cast to tensor and make a batch dim
+                prompt = torch.tensor(self.tokenizer.encode(prompt)).unsqueeze(0)
+            except AttributeError:
+                raise RuntimeError(
+                    f"Prompt input is not tokenized and tokenizer was not provided to {self.__class__.__name__}. Either provide integer input or provide tokenizer to model initialization."
+                )
+
+        prompt = prompt.to(device)
+
+        # Move model to eval() mode if needed
+        # and cache state to set it back after generating tokens
+        was_training = False
+        if self.training:
+            was_training = True
+            self.eval()
+
+        for _ in range(max_new_tokens):
+            prompt_cond = prompt[:, -self.base_model.context_length :]
+            logits = self(prompt_cond)
+
+            # focus only on the last time step
+            logits = logits[:, -1, :] / temperature  # becomes (1, context_length, C) -> (1, C)
+            probs = F.softmax(logits, dim=-1)
+
+            if sample_tokens:
+                prompt_next = torch.multinomial(probs, num_samples=1)  # (1, 1)
+            else:
+                _, prompt_next = torch.topk(probs, k=1, dim=-1)
+
+            prompt = torch.cat((prompt, prompt_next), dim=1)  # (1, T+1)
+
+        if self.tokenizer is not None:
+            # remove the batch dim for decoding
+            prompt = self.tokenizer.decode(prompt.cpu().squeeze())
+
+        if was_training:
+            self.train()
+
+        return prompt

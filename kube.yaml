@@ -1,7 +1,7 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: gpt-model-context-length-${CONTEXTLENGTH}
+  name: gpt-model-context-length-${CONTEXTLENGTH}-with-temperature
 spec:
   backoffLimit: 1
   completions: 1
@@ -20,7 +20,7 @@ spec:
           value: "1"
         args: [
           "wandb login --relogin $(cat wandbcreds) && \
-          python main.py --context-length=${CONTEXTLENGTH} --batch-size=${BATCHSIZE} --name=${CONTEXTLENGTH}-with-sample-output --num-workers=32"
+          python main.py --context-length=${CONTEXTLENGTH} --batch-size=${BATCHSIZE} --name=${CONTEXTLENGTH}-with-sample-output-and-temperature --num-workers=32"
         ]
         resources:
           limits:

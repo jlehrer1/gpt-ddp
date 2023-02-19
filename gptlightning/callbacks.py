@@ -57,7 +57,7 @@ class SampleTextGenerationCallback(Callback):
         if self.log_wandb:
             table = wandb.Table(columns=["epoch", "step", "text"])
             table.add_data(epoch, step, " ".join(text))
-            wandb.log({"Text Generation (No Prompt)": table})
+            wandb.log({f"Text Generation Prompt={'No Prompt' if self.prompt is None else self.prompt[0: 100]}...": table})
 
     def on_train_epoch_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule) -> None:
         curr_epoch = pl_module.current_epoch
