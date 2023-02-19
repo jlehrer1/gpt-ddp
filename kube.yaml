@@ -1,7 +1,7 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: gpt-model-context-length-${CONTEXTLENGTH}-${NBLOCKS}-${NHEADS}
+  name: gpt-model-context-length-${CONTEXTLENGTH}-blocks-${NBLOCKS}-heads-${NHEADS}-batch-${BATCHSIZE}
 spec:
   backoffLimit: 1
   completions: 1

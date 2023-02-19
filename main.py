@@ -23,13 +23,17 @@ if __name__ == "__main__":
     # model hparams
     parser.add_argument("--context-length", default=64, type=int)
     parser.add_argument("--n-blocks", default=4, type=int)
-    parser.add_argument("--n-heads", default=6, type=int)
+    parser.add_argument("--n-heads", default=4, type=int)
     parser.add_argument("--n-embd", default=64, type=int)
 
     args = parser.parse_args()
 
     # dataloader params
-    batch_size, num_workers, name = args.batch_size, args.num_workers, args.name,
+    batch_size, num_workers, name = (
+        args.batch_size,
+        args.num_workers,
+        args.name,
+    )
 
     # model params
     context_length, n_blocks, n_heads, n_embd = args.context_length, args.n_blocks, args.n_heads, args.n_embd
