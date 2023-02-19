@@ -1,12 +1,13 @@
 import os
-
-import torch
-from pytorch_lightning.callbacks import Callback
-import wandb
-import pytorch_lightning as pl
 from typing import *
 
 import boto3
+import pytorch_lightning as pl
+import torch
+from pytorch_lightning.callbacks import Callback
+
+import wandb
+
 
 class SampleTextGenerationCallback(Callback):
     def __init__(
@@ -23,7 +24,7 @@ class SampleTextGenerationCallback(Callback):
         self.prompt = prompt
         self.new_tokens = new_tokens
         self.log_wandb = log_wandb
-        
+
         os.makedirs(write_path, exist_ok=True)
 
     def on_validation_epoch_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule) -> None:
@@ -37,11 +38,11 @@ class SampleTextGenerationCallback(Callback):
                 max_new_tokens=self.new_tokens,
             )
             # just for writing purposes
-            text = text.split(' ')
+            text = text.split(" ")
 
             with open(os.path.join(self.write_path, f"epoch_{curr_epoch}_sample_output.txt"), "w") as f:
                 for idx, word in enumerate(text):
-                    # write a newline every ten words to make the output 
+                    # write a newline every ten words to make the output
                     # more human readable
                     if idx % 10 == 0:
                         f.write(f"{word} \n")
@@ -50,12 +51,12 @@ class SampleTextGenerationCallback(Callback):
 
             if self.log_wandb:
                 table = wandb.Table(columns=["epoch", "text"])
-                table.add_data(curr_epoch, ' '.join(text[0: 100]))
+                table.add_data(curr_epoch, " ".join(text[0:100]))
                 wandb.log({"Text Generation (No Prompt)": table})
 
 
 class UploadCallback(pl.callbacks.Callback):
-    """Custom PyTorch callback for uploading model checkpoints to a S3 bucket using a boto3 
+    """Custom PyTorch callback for uploading model checkpoints to a S3 bucket using a boto3
     resource object.
 
     Parameters:

@@ -1,3 +1,4 @@
+import argparse
 from functools import partial
 
 import pytorch_lightning as pl
@@ -11,9 +12,15 @@ from gptlightning import SampleTextGenerationCallback
 from gptlightning.data import AutoRegressiveTextSampler
 from gptlightning.lightning_model import GPT
 
-context_length = 1024
-batch_size = 24
-num_workers = 32
+parser = argparse.ArgumentParser()
+
+parser.add_argument("--context-length", default=128, type=int)
+parser.add_argument("--batch-size", default=16, type=int)
+parser.add_argument("--num-workers", default=32, type=int)
+parser.add_argument("--name", default="GPT Model", type=str)
+
+args = parser.parse_args()
+context_length, batch_size, num_workers, name = args.context_length, args.batch_size, args.num_workers, args.name
 
 device = "gpu" if torch.cuda.is_available() else None
 
@@ -63,7 +70,7 @@ trainer = pl.Trainer(
     accelerator=device,
     devices=1 if device == "gpu" else None,
     max_epochs=500,
-    logger=WandbLogger(name="GPT (Context Length 1024)", project="Language Modeling"),
+    logger=WandbLogger(name=name, project="Language Modeling"),
     callbacks=[SampleTextGenerationCallback(every_n_epochs=1, log_wandb=True)],
 )
 

@@ -4,6 +4,7 @@ import torch.nn.functional as F
 
 device = "cuda:0" if torch.cuda.is_available() else "cpu"
 
+
 class SelfAttentionHead(nn.Module):
     def __init__(self, n_embd: int, head_size: int, context_length: int) -> None:
         super().__init__()
@@ -60,8 +61,8 @@ class DecoderBlock(nn.Module):
         # for inner matrix :shrug:
         self.ff = nn.Sequential(
             nn.Linear(n_embd, 4 * n_embd),
-            nn.ReLU(),
             nn.Linear(4 * n_embd, n_embd),
+            nn.GELU(),
             nn.Dropout(dropout),
         )
 
@@ -137,7 +138,7 @@ class GPTModel(nn.Module):
         # prompt is (B, T) array of indices in the current context
         for _ in range(max_new_tokens):
             # crop prompt to the last context_length tokens
-            prompt_cond = prompt[:, -self.context_length:]
+            prompt_cond = prompt[:, -self.context_length :]
             # get the predictions
             logits = self(prompt_cond)
             # focus only on the last time step
