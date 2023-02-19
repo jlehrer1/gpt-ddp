@@ -8,7 +8,6 @@ import pytorch_lightning as pl
 class SampleTextGenerationCallback(Callback):
     def __init__(
         self,
-        context_length: int,
         write_path: str = "./sample_output",
         every_n_epochs: int = 4,
         prompt: str = None,
@@ -16,7 +15,6 @@ class SampleTextGenerationCallback(Callback):
         log_wandb: bool = False,
     ) -> None:
         super().__init__()
-        self.context_length = context_length
         self.write_path = write_path
         self.every_n_epochs = every_n_epochs
         self.prompt = prompt
@@ -30,16 +28,15 @@ class SampleTextGenerationCallback(Callback):
 
         if curr_epoch % self.every_n_epochs == 0:
             # generate writing sample just from "empty" prompt
-            prompt = torch.zeros((1, 1), dtype=torch.long) if self.prompt is not None else self.prompt
+            prompt = torch.zeros((1, 1), dtype=torch.long) if self.prompt is None else self.prompt
             text = pl_module.base_model.generate(
                 prompt,
                 max_new_tokens=self.new_tokens,
-                context_length=self.context_length,
             )
             # just for writing purposes
             text = text.split(' ')
 
-            with open(os.path.join(self.write_path, f"{curr_epoch}_sample_output.txt"), "w") as f:
+            with open(os.path.join(self.write_path, f"epoch_{curr_epoch}_sample_output.txt"), "w") as f:
                 for idx, word in enumerate(text):
                     # write a newline every ten words to make the output 
                     # more human readable

@@ -1,14 +1,14 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: gpt-model-2
+  name: gpt-model
 spec:
   backoffLimit: 1
   completions: 1
   template:
     metadata:
       labels:
-        k8s-app: gpt-model-2
+        k8s-app: gpt-model
     spec:
       restartPolicy: Never
       containers:

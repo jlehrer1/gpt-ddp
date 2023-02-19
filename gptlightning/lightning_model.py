@@ -2,7 +2,6 @@ from functools import partial
 from typing import Type, Union
 
 import pytorch_lightning as pl
-import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
@@ -53,13 +52,13 @@ class GPT(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         loss = self._step(batch)
 
-        self.log("train_loss", loss)
+        self.log("train_loss", loss, on_step=True, on_epoch=True)
         return loss
 
     def validation_step(self, batch, batch_idx):
         loss = self._step(batch)
 
-        self.log("val_loss", loss)
+        self.log("val_loss", loss, on_step=True, on_epoch=True)
         return loss
 
     def configure_optimizers(self):
