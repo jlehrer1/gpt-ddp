@@ -22,6 +22,8 @@ class GPT(pl.LightningModule):
         tokenizer=None,
     ) -> None:
         super().__init__()
+        self.save_hyperparameters()
+
         self.optimizer = optimizer
         self.scheduler = scheduler
         self.tokenizer = tokenizer
