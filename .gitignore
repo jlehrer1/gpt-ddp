@@ -4,3 +4,4 @@ wandbcreds
 **/__pycache__/*
 wandb/*
 Language*
+credentials

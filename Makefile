@@ -15,3 +15,6 @@ run:
 
 go:
 	make build && make push
+
+format:
+	black --line-length=130 . && isort .

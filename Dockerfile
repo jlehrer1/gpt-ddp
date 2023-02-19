@@ -32,4 +32,7 @@ COPY 'training_data.txt' .
 COPY 'validation_data.txt' .
 COPY main.py .
 COPY gptlightning gptlightning
+
+# copy credential things
 COPY wandbcreds .
+COPY credentials .

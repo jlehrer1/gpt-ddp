@@ -27,7 +27,11 @@ class SampleTextGenerationCallback(Callback):
 
         os.makedirs(write_path, exist_ok=True)
 
-    def on_validation_epoch_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule) -> None:
+    def on_validation_epoch_end(
+        self,
+        trainer: pl.Trainer,
+        pl_module: pl.LightningModule,
+    ) -> None:
         curr_epoch = pl_module.current_epoch
 
         if curr_epoch % self.every_n_epochs == 0:
@@ -40,7 +44,13 @@ class SampleTextGenerationCallback(Callback):
             # just for writing purposes
             text = text.split(" ")
 
-            with open(os.path.join(self.write_path, f"epoch_{curr_epoch}_sample_output.txt"), "w") as f:
+            with open(
+                os.path.join(
+                    self.write_path,
+                    f"epoch_{curr_epoch}_sample_output.txt",
+                ),
+                "w",
+            ) as f:
                 for idx, word in enumerate(text):
                     # write a newline every ten words to make the output
                     # more human readable
@@ -51,12 +61,15 @@ class SampleTextGenerationCallback(Callback):
 
             if self.log_wandb:
                 table = wandb.Table(columns=["epoch", "text"])
-                table.add_data(curr_epoch, " ".join(text[0:100]))
+                table.add_data(
+                    curr_epoch,
+                    " ".join(text[0:100]),
+                )
                 wandb.log({"Text Generation (No Prompt)": table})
 
 
-class UploadCallback(pl.callbacks.Callback):
-    """Custom PyTorch callback for uploading model checkpoints to a S3 bucket using a boto3
+class UploadCheckpointToS3(pl.callbacks.Callback):
+    """Custom PyTorch callback for uploading model checkpoints to a s3_resource bucket using a boto3
     resource object.
 
     Parameters:
@@ -69,7 +82,7 @@ class UploadCallback(pl.callbacks.Callback):
         self,
         path: str,
         desc: str,
-        s3: boto3.resource,
+        s3_resource: boto3.resource,
         bucket: str,
         upload_prefix: int = "model_checkpoints",
         n_epochs: int = 10,
@@ -79,11 +92,13 @@ class UploadCallback(pl.callbacks.Callback):
         self.path = path
         self.desc = desc
 
-        self.s3 = s3
+        self.s3_resource = s3_resource
         self.bucket = bucket
         self.upload_prefix = upload_prefix
         self.epochs = n_epochs
         self.quiet = quiet
+
+        os.makedirs(self.path, exist_ok=True)
 
     def on_train_epoch_end(self, trainer, pl_module):
         epoch = trainer.current_epoch
@@ -101,9 +116,12 @@ class UploadCallback(pl.callbacks.Callback):
                 print(f"Uploading checkpoint at epoch {epoch}")
 
             try:
-                self.s3.Bucket(self.bucket).upload_file(
+                self.s3_resource.Bucket(self.bucket).upload_file(
                     Filename=checkpoint_path,
-                    Key=os.path.join(self.upload_prefix, checkpoint_path),
+                    Key=os.path.join(
+                        self.upload_prefix,
+                        checkpoint_path,
+                    ),
                 )
 
             except Exception as e:

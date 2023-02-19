@@ -6,7 +6,12 @@ device = "cuda:0" if torch.cuda.is_available() else "cpu"
 
 
 class SelfAttentionHead(nn.Module):
-    def __init__(self, n_embd: int, head_size: int, context_length: int) -> None:
+    def __init__(
+        self,
+        n_embd: int,
+        head_size: int,
+        context_length: int,
+    ) -> None:
         super().__init__()
 
         self.key = nn.Linear(n_embd, head_size, bias=False)
@@ -14,7 +19,10 @@ class SelfAttentionHead(nn.Module):
         self.value = nn.Linear(n_embd, head_size, bias=False)
 
         # dont register as attribute / in gradient graph
-        self.register_buffer("tril", torch.tril(torch.ones(context_length, context_length)))
+        self.register_buffer(
+            "tril",
+            torch.tril(torch.ones(context_length, context_length)),
+        )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         _, T, C = x.shape
@@ -36,25 +44,54 @@ class SelfAttentionHead(nn.Module):
 
 
 class MultiHeadAttention(nn.Module):
-    def __init__(self, n_heads: int, n_embd: int, head_size: int, context_length: int) -> None:
+    def __init__(
+        self,
+        n_heads: int,
+        n_embd: int,
+        head_size: int,
+        context_length: int,
+    ) -> None:
         super().__init__()
 
-        self.heads = nn.ModuleList([SelfAttentionHead(n_embd, head_size, context_length) for _ in range(n_heads)])
+        self.heads = nn.ModuleList(
+            [
+                SelfAttentionHead(
+                    n_embd,
+                    head_size,
+                    context_length,
+                )
+                for _ in range(n_heads)
+            ]
+        )
         self.projection = nn.Linear(n_embd, n_embd)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         # concat along channel dim of (B, T, C) Tensors
-        x = torch.concat([head(x) for head in self.heads], dim=-1)
+        x = torch.concat(
+            [head(x) for head in self.heads],
+            dim=-1,
+        )
         x = self.projection(x)
 
         return x
 
 
 class DecoderBlock(nn.Module):
-    def __init__(self, n_heads: int, n_embd: int, context_length: int, dropout: float) -> None:
+    def __init__(
+        self,
+        n_heads: int,
+        n_embd: int,
+        context_length: int,
+        dropout: float,
+    ) -> None:
         super().__init__()
         head_size = n_embd // n_heads
-        self.attention = MultiHeadAttention(n_heads, n_embd, head_size, context_length)
+        self.attention = MultiHeadAttention(
+            n_heads,
+            n_embd,
+            head_size,
+            context_length,
+        )
 
         # feedforward section
         # multiplier of 4 is recommended from attention is all you need paper

@@ -1,3 +1,3 @@
-export CONTEXTLENGTH=512
-export BATCHSIZE=16
+export CONTEXTLENGTH=700
+export BATCHSIZE=32
 envsubst < kube.yaml | kubectl create -f -
