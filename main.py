@@ -16,18 +16,23 @@ if __name__ == "__main__":
     # set up parser for command line args
     parser = argparse.ArgumentParser()
 
-    parser.add_argument("--context-length", default=64, type=int)
     parser.add_argument("--batch-size", default=16, type=int)
     parser.add_argument("--num-workers", default=4, type=int)
     parser.add_argument("--name", default="GPT Model", type=str)
 
+    # model hparams
+    parser.add_argument("--context-length", default=64, type=int)
+    parser.add_argument("--n-blocks", default=4, type=int)
+    parser.add_argument("--n-heads", default=6, type=int)
+    parser.add_argument("--n-embd", default=64, type=int)
+
     args = parser.parse_args()
-    context_length, batch_size, num_workers, name = (
-        args.context_length,
-        args.batch_size,
-        args.num_workers,
-        args.name,
-    )
+
+    # dataloader params
+    batch_size, num_workers, name = args.batch_size, args.num_workers, args.name,
+
+    # model params
+    context_length, n_blocks, n_heads, n_embd = args.context_length, args.n_blocks, args.n_heads, args.n_embd
 
     device = "gpu" if torch.cuda.is_available() else None
 
@@ -79,6 +84,9 @@ if __name__ == "__main__":
         vocab_size=tokenizer.vocab_size,
         tokenizer=tokenizer,
         context_length=context_length,
+        n_blocks=n_blocks,
+        n_embd=n_embd,
+        n_heads=n_heads,
     )
 
     # set up callbacks
@@ -102,7 +110,7 @@ if __name__ == "__main__":
 
     upload_callback = UploadCheckpointToS3(
         path="./checkpoints",
-        desc=f"{name}-checkpoint",
+        desc=f"{name}-checkpoint-heads-{n_heads}-blocks-{n_blocks}-nembd-{n_embd}",
         s3_resource=s3,
         bucket="braingeneersdev",
         upload_prefix="jlehrer/gpt_model/",
@@ -113,12 +121,13 @@ if __name__ == "__main__":
         accelerator=device,
         devices=1 if device == "gpu" else None,
         max_epochs=500,
-        logger=WandbLogger(name=name, project="Language Modeling"),
+        logger=WandbLogger(name=f"{name}-heads-{n_heads}-blocks-{n_blocks}-nembd-{n_embd}", project="Language Modeling"),
         callbacks=[
             sample_text_generator,
             upload_callback,
         ],
         limit_val_batches=1000,
+        track_grad_norm=True,
     )
 
     print("Beginning training phase")
