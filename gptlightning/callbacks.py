@@ -81,7 +81,7 @@ class SampleTextGenerationCallback(Callback):
             self._sample_output_from_prompt(pl_module=pl_module, epoch=epoch, step=batch_idx)
 
 
-class UploadCheckpointToS3(pl.callbacks.Callback):
+class UploadCheckpointToS3(Callback):
     """Custom PyTorch callback for uploading model checkpoints to a s3_resource bucket using a boto3
     resource object.
 
@@ -99,7 +99,7 @@ class UploadCheckpointToS3(pl.callbacks.Callback):
         bucket: str,
         upload_prefix: int = "model_checkpoints",
         n_epochs: int = 10,
-        quiet: bool = False,
+        n_steps: int = None,
     ) -> None:
         super().__init__()
         self.path = path
@@ -108,35 +108,41 @@ class UploadCheckpointToS3(pl.callbacks.Callback):
         self.s3_resource = s3_resource
         self.bucket = bucket
         self.upload_prefix = upload_prefix
-        self.epochs = n_epochs
-        self.quiet = quiet
+
+        self.n_epochs = n_epochs
+        self.n_steps = n_steps
 
         os.makedirs(self.path, exist_ok=True)
 
-    def on_train_epoch_end(self, trainer, pl_module):
+    def _save_and_upload_checkpoint(self, trainer: pl.Trainer, epoch: int, step: int) -> None:
+        checkpoint = f"checkpoint-{epoch}-step-{step}-desc-{self.desc}.ckpt"
+        checkpoint_path = os.path.join(self.path, checkpoint)
+
+        trainer.save_checkpoint(checkpoint_path)
+
+        print(f"Uploading checkpoint at epoch {epoch}")
+
+        try:
+            self.s3_resource.Bucket(self.bucket).upload_file(
+                Filename=checkpoint_path,
+                Key=os.path.join(self.upload_prefix, checkpoint_path.split("/")[-1]),
+            )
+        except Exception as e:
+            print(f"Error when uploading on epoch {epoch}")
+            print(e)
+
+    def on_train_batch_end(
+        self, trainer: "pl.Trainer", pl_module: "pl.LightningModule", outputs: torch.Tensor, batch: Any, batch_idx: int
+    ) -> None:
         epoch = trainer.current_epoch
+        step = trainer.global_step
 
-        if epoch % self.epochs == 0:  # Save every ten epochs
-            checkpoint = f"checkpoint-{epoch}-desc-{self.desc}.ckpt"
-            checkpoint_path = os.path.join(self.path, checkpoint)
+        if self.n_steps is not None and step % self.n_steps == 0:
+            self._save_and_upload_checkpoint(trainer, epoch, step)
 
-            if not self.quiet:
-                print(f"Saving checkpoint on epoch {epoch} to {checkpoint_path}")
+    def on_train_epoch_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule):
+        epoch = trainer.current_epoch
+        step = trainer.global_step
 
-            trainer.save_checkpoint(checkpoint_path)
-
-            if not self.quiet:
-                print(f"Uploading checkpoint at epoch {epoch}")
-
-            try:
-                self.s3_resource.Bucket(self.bucket).upload_file(
-                    Filename=checkpoint_path,
-                    Key=os.path.join(
-                        self.upload_prefix,
-                        checkpoint_path,
-                    ),
-                )
-
-            except Exception as e:
-                print(f"Error when uploading on epoch {epoch}")
-                print(e)
+        if epoch % self.n_epochs == 0:  # Save every ten epochs
+            self._save_and_upload_checkpoint(trainer, epoch, step)

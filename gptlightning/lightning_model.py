@@ -1,5 +1,5 @@
 from functools import partial
-from typing import Type, Union
+from typing import Any, Callable, Optional, Type, Union
 
 import pytorch_lightning as pl
 import torch
@@ -24,6 +24,8 @@ class GPT(pl.LightningModule):
         dropout: float = 0.0,
         tokenizer: AutoTokenizer = None,
         metrics: Metrics = None,
+        warmup_iter: int = 4000,
+        learning_rate: float = 3e-3,
     ) -> None:
         super().__init__()
 
@@ -34,6 +36,8 @@ class GPT(pl.LightningModule):
         self.optimizer = optimizer
         self.scheduler = scheduler
         self.tokenizer = tokenizer
+        self.warmup_iter = warmup_iter
+        self.learning_rate = learning_rate
 
         self.base_model = GPTModel(
             vocab_size=vocab_size,
@@ -73,7 +77,7 @@ class GPT(pl.LightningModule):
         return loss
 
     def validation_step(self, batch: torch.Tensor, batch_idx: int) -> float:
-        loss = self._step(batch, "train", self.trainer.log_every_n_steps)
+        loss = self._step(batch, "val", self.trainer.log_every_n_steps)
 
         return loss
 
@@ -97,3 +101,21 @@ class GPT(pl.LightningModule):
         if self.metrics:
             result = self.metrics.compute_epoch("val")
             self.logger.log_metrics(result)
+
+    def optimizer_step(
+        self,
+        epoch: int,
+        batch_idx: int,
+        optimizer: torch.optim.Optimizer,
+        optimizer_idx: int = 0,
+        optimizer_closure: Optional[Callable[[], Any]] = None,
+        on_tpu: bool = False,
+        using_lbfgs: bool = False,
+    ) -> None:
+        optimizer.step(closure=optimizer_closure)
+
+        # Learning rate warmup for the first self.warmup_iter number of steps
+        if self.trainer.global_step < self.warmup_iter:
+            lr_scale = min(1.0, float(self.trainer.global_step + 1) / self.warmup_iter)
+            for pg in optimizer.param_groups:
+                pg["lr"] = lr_scale * self.learning_rate

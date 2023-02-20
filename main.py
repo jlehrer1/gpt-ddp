@@ -27,6 +27,8 @@ if __name__ == "__main__":
     parser.add_argument("--n-heads", default=4, type=int)
     parser.add_argument("--n-embd", default=64, type=int)
 
+    # optimizer hparams
+    parser.add_argument("--lr", default=3e-4, type=float)
     args = parser.parse_args()
 
     # dataloader params
@@ -38,6 +40,9 @@ if __name__ == "__main__":
 
     # model params
     context_length, n_blocks, n_heads, n_embd = args.context_length, args.n_blocks, args.n_heads, args.n_embd
+
+    # optimizer params
+    lr = args.lr
 
     device = "gpu" if torch.cuda.is_available() else None
 
@@ -84,21 +89,21 @@ if __name__ == "__main__":
     # set up metrics
     metrics = Metrics(
         metrics={
-            "perplexity": tm.Perplexity,
-        }
+            "perplexity": tm.Perplexity(),
+        },
+        phases=["train", "val"],
     )
 
     model = GPT(
-        optimizer=partial(
-            Adam,
-            lr=1e-5,
-        ),
+        optimizer=Adam,
         vocab_size=tokenizer.vocab_size,
         tokenizer=tokenizer,
         context_length=context_length,
         n_blocks=n_blocks,
         n_embd=n_embd,
         n_heads=n_heads,
+        learning_rate=lr,
+        warmup_iter=4000,
     )
 
     # set up callbacks
@@ -127,6 +132,7 @@ if __name__ == "__main__":
         bucket="braingeneersdev",
         upload_prefix="jlehrer/gpt_model/",
         n_epochs=1,
+        n_steps=50000,
     )
 
     trainer = pl.Trainer(
@@ -135,7 +141,7 @@ if __name__ == "__main__":
         max_epochs=500,
         logger=WandbLogger(
             name=f"{name}-heads-{n_heads}-blocks-{n_blocks}-nembd-{n_embd}",
-            project="Language Modeling",
+            project="Language Modeling (with Warmup)",
             offline=True,
         ),
         callbacks=[

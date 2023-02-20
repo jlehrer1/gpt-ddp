@@ -1,7 +1,7 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: gpt-model-context-length-${CONTEXTLENGTH}-blocks-${NBLOCKS}-heads-${NHEADS}-batch-${BATCHSIZE}
+  name: gpt-cl-${CONTEXTLENGTH}-blocks-${NBLOCKS}-heads-${NHEADS}-batch-${BATCHSIZE}-lr-${LR}
 spec:
   backoffLimit: 1
   completions: 1
@@ -75,13 +75,13 @@ spec:
       #             - NVIDIA-RTX-A6000
       #             - Quadro-RTX-8000
       #             - NVIDIA-A10
+      #             - NVIDIA-A100-PCIE-40GB-MIG-2g.10gb
       #         - key: nvidia.com/gpu.product
       #           operator: NotIn
       #           values:
       #           - NVIDIA-GeForce-GTX-1070
       #           - NVIDIA-GeForce-GTX-1080
       #           - Quadro-M4000
-      #           - NVIDIA-A100-PCIE-40GB-MIG-2g.10gb
       #           - NVIDIA-GeForce-GTX-1080-Ti
       #           - NVIDIA-GeForce-RTX-2080-Ti
       #           - NVIDIA-TITAN-Xp

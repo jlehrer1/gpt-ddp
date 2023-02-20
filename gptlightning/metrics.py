@@ -21,10 +21,11 @@ class Metrics:
         self.metrics = metrics
         self.phases = phases
 
-        self.phase_metrics = {phase: {name: deepcopy(metric) for name, metric in self.metrics} for phase in self.phases}
+        self.phase_metrics = {phase: {name: deepcopy(metric) for name, metric in self.metrics.items()} for phase in self.phases}
 
-        self.epoch_metrics_container = {phase: {name: 0 for name in self.metrics} for phase in self.phases}
-        self.step_metrics_container = {phase: {name: [] for name in self.metrics} for phase in self.phases}
+        self.step_metrics_container = {phase: {name: 0 for name in self.metrics} for phase in self.phases}
+
+        self.epoch_metrics_container = {phase: {name: [] for name in self.metrics} for phase in self.phases}
 
         self.phase_steps = {phase: 0 for phase in self.phases}
 
