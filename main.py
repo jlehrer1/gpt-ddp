@@ -4,12 +4,13 @@ from functools import partial
 import boto3
 import pytorch_lightning as pl
 import torch
+import torchmetrics as tm
 from pytorch_lightning.loggers import WandbLogger
 from torch.optim import Adam
 from torch.utils.data import DataLoader
 from transformers import AutoTokenizer
 
-from gptlightning import (GPT, AutoRegressiveTextSampler,
+from gptlightning import (GPT, AutoRegressiveTextSampler, Metrics,
                           SampleTextGenerationCallback, UploadCheckpointToS3)
 
 if __name__ == "__main__":
@@ -80,6 +81,13 @@ if __name__ == "__main__":
     )
 
     print("Setting up model")
+    # set up metrics
+    metrics = Metrics(
+        metrics={
+            "perplexity": tm.Perplexity,
+        }
+    )
+
     model = GPT(
         optimizer=partial(
             Adam,
@@ -125,7 +133,11 @@ if __name__ == "__main__":
         accelerator=device,
         devices=1 if device == "gpu" else None,
         max_epochs=500,
-        logger=WandbLogger(name=f"{name}-heads-{n_heads}-blocks-{n_blocks}-nembd-{n_embd}", project="Language Modeling"),
+        logger=WandbLogger(
+            name=f"{name}-heads-{n_heads}-blocks-{n_blocks}-nembd-{n_embd}",
+            project="Language Modeling",
+            offline=True,
+        ),
         callbacks=[
             sample_text_generator,
             upload_callback,

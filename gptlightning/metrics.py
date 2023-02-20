@@ -1,9 +1,9 @@
 from copy import deepcopy
 from typing import Any, Optional
 
+import numpy as np
 import torch
 import torchmetrics as tm
-import numpy as np
 
 
 class Metrics:
@@ -28,7 +28,9 @@ class Metrics:
 
         self.phase_steps = {phase: 0 for phase in self.phases}
 
-    def compute_step(self, phase: str, preds: torch.Tensor, targets: torch.Tensor, log_every_n_steps: int) -> Optional[dict[str, Any]]:
+    def compute_step(
+        self, phase: str, preds: torch.Tensor, targets: torch.Tensor, log_every_n_steps: int
+    ) -> Optional[dict[str, Any]]:
         assert phase in self.phases, f"Phase {phase} not in phases set at initiliazation"
         curr_step_metrics = None
 
@@ -55,7 +57,7 @@ class Metrics:
             try:
                 r = self.phase_metrics[phase][metric].compute().item()
                 self.epoch_metrics_container[phase][metric].append(r)
-            except AttributeError:
+            except AttributeError:  # if .item() is not valid since metric doesnt return a 0dim tensor
                 print(f"Metric {metric} did not return a float, not logging and continuing...")
 
         # reset the metric classes for next epoch
@@ -71,15 +73,9 @@ class Metrics:
         for metric in self.metrics:
             best_func = np.argmax if self.phase_metrics[phase][metric].higher_is_better else np.argmin
 
-            summary_metrics[f"{metric}_best_epoch_{phase}"] = best_func(
-                self.epoch_metrics_container[phase][metric]
-            )
+            summary_metrics[f"{metric}_best_epoch_{phase}"] = best_func(self.epoch_metrics_container[phase][metric])
 
             best_func = np.maximum if self.phase_metrics[phase][metric].higher_is_better else np.minimum
-            summary_metrics[f"{metric}_best_value_{phase}"] = best_func(
-                self.epoch_metrics_container[phase][metric]
-            )
+            summary_metrics[f"{metric}_best_value_{phase}"] = best_func(self.epoch_metrics_container[phase][metric])
 
         return summary_metrics
-
-
