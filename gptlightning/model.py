@@ -78,7 +78,6 @@ class DecoderBlock(nn.Module):
     ) -> None:
         super().__init__()
 
-        assert n_embd % n_heads == 0, "Embedding dim must be divisible by number of heads"
         head_size = n_embd // n_heads
         self.attention = MultiHeadAttention(
             n_heads=n_heads,

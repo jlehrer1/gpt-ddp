@@ -1,5 +1,5 @@
-export BATCHSIZE=16
-export CONTEXTLENGTH=256
+export BATCHSIZE=4
+export CONTEXTLENGTH=512
 export NBLOCKS=12
 export NHEADS=8
 export NEMBD=128

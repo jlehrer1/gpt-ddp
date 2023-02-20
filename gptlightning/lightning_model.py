@@ -5,8 +5,10 @@ import pytorch_lightning as pl
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from transformers import AutoTokenizer
 
-from .model import GPTModel
+from gptlightning.metrics import Metrics
+from gptlightning.model import GPTModel
 
 
 class GPT(pl.LightningModule):
@@ -20,9 +22,13 @@ class GPT(pl.LightningModule):
         n_embd: int = 64,
         context_length: int = 64,
         dropout: float = 0.0,
-        tokenizer=None,
+        tokenizer: AutoTokenizer = None,
+        metrics: Metrics = None,
     ) -> None:
         super().__init__()
+
+        assert n_embd % n_heads == 0, "Embedding dim must be divisible by number of heads"
+
         self.save_hyperparameters()
 
         self.optimizer = optimizer
@@ -39,21 +45,27 @@ class GPT(pl.LightningModule):
             tokenizer=tokenizer,
         )
 
+        self.metrics = metrics
+
     def forward(self, x):
         return self.base_model(x)
 
-    def _step(self, batch):
+    def _step(self, batch: torch.Tensor, phase: str, log_every_n_steps: int) -> float:
         x, y = batch
         logits = self(x)
         B, T, C = logits.shape
         logits = logits.view(B * T, C)
         targets = y.view(B * T)
+
+        if self.metrics:
+            self.metrics.compute_step(phase=phase, preds=logits, targets=targets, log_every_n_steps=log_every_n_steps)
+
         loss = F.cross_entropy(logits, targets)
 
         return loss
 
     def training_step(self, batch, batch_idx):
-        loss = self._step(batch)
+        loss = self._step(batch, "train", self.trainer.log_every_n_steps)
 
         self.log(
             "train_loss",
@@ -64,7 +76,7 @@ class GPT(pl.LightningModule):
         return loss
 
     def validation_step(self, batch, batch_idx):
-        loss = self._step(batch)
+        loss = self._step(batch, "train", self.trainer.log_every_n_steps)
 
         self.log(
             "val_loss",
@@ -72,6 +84,7 @@ class GPT(pl.LightningModule):
             on_step=True,
             on_epoch=True,
         )
+
         return loss
 
     def configure_optimizers(self):
