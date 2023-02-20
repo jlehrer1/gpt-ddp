@@ -58,32 +58,22 @@ class GPT(pl.LightningModule):
         targets = y.view(B * T)
 
         if self.metrics:
-            self.metrics.compute_step(phase=phase, preds=logits, targets=targets, log_every_n_steps=log_every_n_steps)
+            result = self.metrics.compute_step(phase=phase, preds=logits, targets=targets, log_every_n_steps=log_every_n_steps)
+            if result is not None:
+                self.logger.log_metrics(result)
 
         loss = F.cross_entropy(logits, targets)
+        self.log(f"{phase}_loss", loss, on_step=True, on_epoch=True)
 
         return loss
 
-    def training_step(self, batch, batch_idx):
+    def training_step(self, batch: torch.Tensor, batch_idx: int) -> float:
         loss = self._step(batch, "train", self.trainer.log_every_n_steps)
 
-        self.log(
-            "train_loss",
-            loss,
-            on_step=True,
-            on_epoch=True,
-        )
         return loss
 
-    def validation_step(self, batch, batch_idx):
+    def validation_step(self, batch: torch.Tensor, batch_idx: int) -> float:
         loss = self._step(batch, "train", self.trainer.log_every_n_steps)
-
-        self.log(
-            "val_loss",
-            loss,
-            on_step=True,
-            on_epoch=True,
-        )
 
         return loss
 
@@ -97,3 +87,13 @@ class GPT(pl.LightningModule):
             optims["scheduler"] = scheduler
 
         return optims
+
+    def on_train_epoch_end(self) -> None:
+        if self.metrics:
+            result = self.metrics.compute_epoch("train")
+            self.logger.log_metrics(result)
+
+    def on_validation_epoch_end(self) -> None:
+        if self.metrics:
+            result = self.metrics.compute_epoch("val")
+            self.logger.log_metrics(result)
