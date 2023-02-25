@@ -5,6 +5,7 @@ import boto3
 import pytorch_lightning as pl
 import torch
 from pytorch_lightning.callbacks import Callback
+from pytorch_lightning.utilities import rank_zero_only
 
 import wandb
 
@@ -30,6 +31,7 @@ class SampleTextGenerationCallback(Callback):
 
         os.makedirs(write_path, exist_ok=True)
 
+    @rank_zero_only
     def _sample_output_from_prompt(self, pl_module: pl.LightningModule, epoch: int, step: int):
         prompt = torch.zeros((1, 1), dtype=torch.long) if self.prompt is None else self.prompt
         text = pl_module.base_model.generate(
@@ -57,8 +59,9 @@ class SampleTextGenerationCallback(Callback):
         if self.log_wandb:
             table = wandb.Table(columns=["epoch", "step", "text"])
             table.add_data(epoch, step, " ".join(text))
-            wandb.log({f"Text Generation Prompt={'No Prompt' if self.prompt is None else self.prompt[0: 100]}...": table})
+            wandb.log({f"Text Generation Prompt={'No Prompt' if self.prompt is None else self.prompt[0: 100]} (etc.)": table})
 
+    @rank_zero_only
     def on_train_epoch_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule) -> None:
         curr_epoch = pl_module.current_epoch
         step = pl_module.global_step
@@ -67,6 +70,7 @@ class SampleTextGenerationCallback(Callback):
             # generate writing sample just from "empty" prompt
             self._sample_output_from_prompt(pl_module=pl_module, epoch=curr_epoch, step=step)
 
+    @rank_zero_only
     def on_train_batch_end(
         self,
         trainer: "pl.Trainer",
@@ -114,6 +118,7 @@ class UploadCheckpointToS3(Callback):
 
         os.makedirs(self.path, exist_ok=True)
 
+    @rank_zero_only
     def _save_and_upload_checkpoint(self, trainer: pl.Trainer, epoch: int, step: int) -> None:
         checkpoint = f"checkpoint-{epoch}-step-{step}-desc-{self.desc}.ckpt"
         checkpoint_path = os.path.join(self.path, checkpoint)
@@ -130,6 +135,7 @@ class UploadCheckpointToS3(Callback):
             print(f"Error when uploading on epoch {epoch}")
             print(e)
 
+    @rank_zero_only
     def on_train_batch_end(
         self, trainer: "pl.Trainer", pl_module: "pl.LightningModule", outputs: torch.Tensor, batch: Any, batch_idx: int
     ) -> None:
@@ -139,6 +145,7 @@ class UploadCheckpointToS3(Callback):
         if self.n_steps is not None and step % self.n_steps == 0:
             self._save_and_upload_checkpoint(trainer, epoch, step)
 
+    @rank_zero_only
     def on_train_epoch_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule):
         epoch = trainer.current_epoch
         step = trainer.global_step

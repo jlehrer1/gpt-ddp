@@ -64,11 +64,10 @@ class GPT(pl.LightningModule):
         if self.metrics:
             result = self.metrics.compute_step(phase=phase, preds=logits, targets=targets, log_every_n_steps=log_every_n_steps)
             if result is not None:
-                self.logger.log_metrics(result)
-                self.logger.save()
+                self.log_dict(result, sync_dist=True)
 
         loss = F.cross_entropy(logits, targets)
-        self.log(f"{phase}_loss", loss, on_step=True, on_epoch=True)
+        self.log(f"{phase}_loss", loss, on_step=True, on_epoch=True, sync_dist=True)
 
         return loss
 
@@ -96,14 +95,12 @@ class GPT(pl.LightningModule):
     def on_train_epoch_end(self) -> None:
         if self.metrics:
             result = self.metrics.compute_epoch("train")
-            self.logger.log_metrics(result)
-            self.logger.save()
+            self.log_dict(result, sync_dist=True)
 
     def on_validation_epoch_end(self) -> None:
         if self.metrics:
             result = self.metrics.compute_epoch("val")
-            self.logger.log_metrics(result)
-            self.logger.save()
+            self.log_dict(result, sync_dist=True)
 
     def optimizer_step(
         self,

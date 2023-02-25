@@ -11,10 +11,12 @@ from torch.optim.lr_scheduler import CosineAnnealingLR
 from torch.utils.data import DataLoader
 from transformers import AutoTokenizer
 
+import wandb
 from gptlightning import (GPT, AutoRegressiveTextSampler, Metrics,
                           SampleTextGenerationCallback, UploadCheckpointToS3)
 
 if __name__ == "__main__":
+    wandb.init()
     # set up parser for command line args
     parser = argparse.ArgumentParser()
 
@@ -30,7 +32,7 @@ if __name__ == "__main__":
 
     # optimizer hparams
     parser.add_argument("--lr", default=3e-4, type=float)
-    parser.add_argument("--accumulate-batches", default=None, type=int)
+    parser.add_argument("--accumulate-batches", default=0, type=int)
     parser.add_argument("--warmup", default=4000, type=int)
     args = parser.parse_args()
 
@@ -46,8 +48,6 @@ if __name__ == "__main__":
 
     # optimizer params
     lr, accumulate_batches, warmup = args.lr, args.accumulate_batches, args.warmup
-
-    device = "gpu" if torch.cuda.is_available() else None
 
     # Text file containing all text you want to train on
     with open("training_data.txt") as f:
@@ -147,13 +147,17 @@ if __name__ == "__main__":
         n_steps=50000,
     )
 
+    device = "gpu" if torch.cuda.is_available() else "cpu"
+    num_devices = torch.cuda.device_count()
+    print(f"Total number of CUDA accelerators is {num_devices}")
     trainer = pl.Trainer(
-        accelerator=device,
-        devices=1 if device == "gpu" else None,
+        accelerator=device if device else None,
+        devices=num_devices if device else None,
+        strategy="ddp" if device else None,
         max_epochs=500,
         logger=WandbLogger(
-            name=f"{name}-heads-{n_heads}-blocks-{n_layers}-nembd-{n_embd}-accum-{accumulate_batches}",
-            project="Language Modeling",
+            name=f"{name}-heads-{n_heads}-blocks-{n_layers}-nembd-{n_embd}-accum-{accumulate_batches}-gpu-{num_devices}",
+            project="Language Modeling TEST",
         ),
         callbacks=[
             sample_text_generator,
@@ -163,7 +167,7 @@ if __name__ == "__main__":
         limit_val_batches=1000,
         track_grad_norm=True,
         accumulate_grad_batches=accumulate_batches if accumulate_batches > 0 else None,
-        gradient_clip_val=4,
+        gradient_clip_val=1,
     )
 
     print("Beginning training phase")

@@ -5,9 +5,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-# This is just for prompt generation
-device = "cuda:0" if torch.cuda.is_available() else "cpu"
-
 
 class SelfAttentionHead(nn.Module):
     def __init__(
@@ -43,7 +40,6 @@ class SelfAttentionHead(nn.Module):
 
         v = self.value(x)
         x = affinity @ v
-
         return x
 
 
@@ -212,7 +208,11 @@ class GPTModel(nn.Module):
                     Either provide integer input or provide tokenizer to model initialization."""
                 )
 
-        prompt = prompt.to(device)
+        # model params should all be on same device
+        # with regular training or ddp, so this trick can get the right device
+        # to move our prompt to (cuda:i for i=0,..,N gpu's)
+        curr_device = next(self.parameters()).device
+        prompt = prompt.to(curr_device)
 
         # Move model to eval() mode if needed
         # and cache state to set it back after generating tokens
