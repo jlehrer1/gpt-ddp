@@ -1,9 +1,9 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: gpt-cl-${CONTEXTLENGTH}-blocks-${NBLOCKS}-heads-${NHEADS}-batch-${BATCHSIZE}-lr-${LR}
+  name: gpt-cl-${CONTEXTLENGTH}-layers-${NLAYERS}-heads-${NHEADS}-b-${BATCHSIZE}-lr-${LR}-acc-${ACCUMBATCHES}-warmup-${WARMUP}
 spec:
-  backoffLimit: 1
+  backoffLimit: 0
   completions: 1
   template:
     metadata:
@@ -23,11 +23,13 @@ spec:
           python main.py \
             --batch-size=${BATCHSIZE} \ 
             --name=gpt \
-            --num-workers=32 \
+            --num-workers=${NUMWORKERS} \
             --context-length=${CONTEXTLENGTH} \
-            --n-blocks=${NBLOCKS} \
+            --n-layers=${NLAYERS} \
             --n-heads=${NHEADS} \ 
-            --n-embd=${NEMBD}"
+            --n-embd=${NEMBD} \
+            --accumulate-batches=${ACCUMBATCHES} \
+            --warmup=${WARMUP}"
         ]
         resources:
           limits:
@@ -36,7 +38,7 @@ spec:
             nvidia.com/gpu: "1"
           requests:
             memory: 32Gi
-            cpu: "16"
+            cpu: "32"
             nvidia.com/gpu: "1"
         volumeMounts:
         - name: ephemeral
@@ -56,34 +58,34 @@ spec:
           operator: "Equal"
           value: "true"
           effect: "NoSchedule"
-      # affinity:
-      #   nodeAffinity:
-      #     requiredDuringSchedulingIgnoredDuringExecution:
-      #       nodeSelectorTerms:
-      #       - matchExpressions:
-      #         # GPU runs only
-      #         - key: nvidia.com/gpu.product
-      #           operator: In
-      #           values:
-      #             - NVIDIA-GeForce-RTX-3090
-      #             - NVIDIA-GeForce-RTX-3090
-      #             - NVIDIA-TITAN-RTX
-      #             - NVIDIA-RTX-A5000
-      #             - Quadro-RTX-6000
-      #             - Tesla-V100-SXM2-32GB
-      #             - NVIDIA-A40
-      #             - NVIDIA-RTX-A6000
-      #             - Quadro-RTX-8000
-      #             - NVIDIA-A10
-      #             - NVIDIA-A100-PCIE-40GB-MIG-2g.10gb
-      #         - key: nvidia.com/gpu.product
-      #           operator: NotIn
-      #           values:
-      #           - NVIDIA-GeForce-GTX-1070
-      #           - NVIDIA-GeForce-GTX-1080
-      #           - Quadro-M4000
-      #           - NVIDIA-GeForce-GTX-1080-Ti
-      #           - NVIDIA-GeForce-RTX-2080-Ti
-      #           - NVIDIA-TITAN-Xp
-      #           - Tesla-T4
-      #         # Host blacklist
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              # GPU runs only
+              - key: nvidia.com/gpu.product
+                operator: In
+                values:
+                  - NVIDIA-GeForce-RTX-3090
+                  - NVIDIA-GeForce-RTX-3090
+                  - NVIDIA-TITAN-RTX
+                  - NVIDIA-RTX-A5000
+                  - Quadro-RTX-6000
+                  - Tesla-V100-SXM2-32GB
+                  - NVIDIA-A40
+                  - NVIDIA-RTX-A6000
+                  - Quadro-RTX-8000
+                  - NVIDIA-A10
+                  - NVIDIA-A100-PCIE-40GB-MIG-2g.10gb
+              - key: nvidia.com/gpu.product
+                operator: NotIn
+                values:
+                - NVIDIA-GeForce-GTX-1070
+                - NVIDIA-GeForce-GTX-1080
+                - Quadro-M4000
+                - NVIDIA-GeForce-GTX-1080-Ti
+                - NVIDIA-GeForce-RTX-2080-Ti
+                - NVIDIA-TITAN-Xp
+                - Tesla-T4
+              # Host blacklist

@@ -1,3 +1,6 @@
+from typing import Union
+
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -89,20 +92,27 @@ class DecoderBlock(nn.Module):
         # feedforward section
         # multiplier of 4 is recommended from attention is all you need paper
         # for inner matrix :shrug:
-        self.ff = nn.Sequential(
-            nn.Linear(n_embd, 4 * n_embd),
-            nn.Linear(4 * n_embd, n_embd),
-            nn.GELU(),
-            nn.Dropout(dropout),
+        self.ff = nn.ModuleDict(
+            {
+                "linear": nn.Linear(n_embd, 4 * n_embd),
+                "projection": nn.Linear(4 * n_embd, n_embd),  # just calling it this for init
+                "activation": nn.GELU(),
+                "dropout": nn.Dropout(dropout),
+            }
         )
 
         # Layernorm for training stability
         self.ln1 = nn.LayerNorm(n_embd)
         self.ln2 = nn.LayerNorm(n_embd)
 
-    def forward(self, x):
-        x = x + self.attention(self.ln1(x))
-        x = x + self.ff(self.ln2(x))
+        # wrapper for running moduledict
+        self.mlp = lambda x: self.ff.dropout(self.ff.activation(self.ff.projection(self.ff.linear(x))))
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x = self.ln1(x)
+        x = x + self.attention(x)
+        x = self.ln2(x)
+        x = x + self.mlp(x)
 
         return x
 
@@ -111,7 +121,7 @@ class GPTModel(nn.Module):
     def __init__(
         self,
         vocab_size: int,
-        n_blocks: int,
+        n_layers: int,
         n_heads: int,
         n_embd: int,
         context_length: int,
@@ -120,6 +130,7 @@ class GPTModel(nn.Module):
     ) -> None:
         super().__init__()
         self.vocab_size = vocab_size
+        self.n_layers = n_layers
         self.n_heads = n_heads
         self.n_embd = n_embd
         self.context_length = context_length
@@ -134,16 +145,47 @@ class GPTModel(nn.Module):
                     context_length=context_length,
                     dropout=dropout,
                 )
-                for _ in range(n_blocks)
+                for _ in range(n_layers)
             ]
         )
         self.ln = nn.LayerNorm(n_embd)
         self.head = nn.Linear(n_embd, vocab_size)
-
         self.tokenizer = tokenizer
 
+        self.apply(self.standard_initialize)
+        self.specialized_initialize()
+
+    def standard_initialize(self, module: Union[nn.Linear, nn.Embedding, nn.LayerNorm]) -> None:
+        """Initializes all linear, embedding and layernorm layers with values given by GPT-1 and GPT-2"""
+        if isinstance(module, nn.Linear):
+            torch.nn.init.normal_(module.weight, mean=0.0, std=0.02)
+            if module.bias is not None:
+                torch.nn.init.zeros_(module.bias)
+        elif isinstance(module, nn.Embedding):
+            torch.nn.init.normal_(module.weight, mean=0.0, std=0.02)
+        elif isinstance(module, nn.LayerNorm):
+            torch.nn.init.zeros_(module.bias)
+            torch.nn.init.ones_(module.weight)
+
+    def specialized_initialize(self):
+        """Initializes the projection layers. These layers are Linear layers at the end of a multiheaded attention block
+        and at the end of the feedforward portion of a transformer decoder block. Practically speaking, since the forward of the
+        decoder block is
+
+        x = self.ln1(x)
+        x = x + self.attention(x)
+        x = self.ln2(x)
+        x = x + self.ff(x)
+
+        This guarantees that the contribution of the attention and FF layers is small at the beginning of training.
+        This has been shown to improve convergence in gpt-2
+        """
+        for name, param in self.named_parameters():
+            if name.endswith("projection.weight"):
+                torch.nn.init.normal_(param, mean=0.0, std=0.02 / np.sqrt(2 * self.n_layers))
+
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        B, T = x.shape
+        _, T = x.shape
 
         tok_emb = self.token_embedding(x)
         # maybe dont need unsqueeze but I don't know broadcasting
@@ -156,14 +198,18 @@ class GPTModel(nn.Module):
         return logits
 
     @torch.no_grad()
-    def generate(self, prompt: torch.Tensor, max_new_tokens: int, temperature: float = 0.8, sample_tokens: bool = False):
+    def generate(
+        self, prompt: Union[torch.Tensor, str], max_new_tokens: int, temperature: float = 0.8, sample_tokens: bool = False
+    ):
         if not torch.is_tensor(prompt):
             try:
                 # cast to tensor and make a batch dim
                 prompt = torch.tensor(self.tokenizer.encode(prompt)).unsqueeze(0)
             except AttributeError:
                 raise RuntimeError(
-                    f"Prompt input is not tokenized and tokenizer was not provided to {self.__class__.__name__}. Either provide integer input or provide tokenizer to model initialization."
+                    f"""Prompt input is not tokenized and tokenizer was not provided to 
+                    {self.__class__.__name__}. 
+                    Either provide integer input or provide tokenizer to model initialization."""
                 )
 
         prompt = prompt.to(device)

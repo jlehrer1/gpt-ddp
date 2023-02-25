@@ -1,7 +1,12 @@
 export BATCHSIZE=16
 export CONTEXTLENGTH=256
-export NBLOCKS=12
-export NHEADS=8
-export NEMBD=128
-export LR=5e-3
+export NLAYERS=24
+export NHEADS=4
+export NEMBD=256
+export LR=3e-4
+export ACCUMBATCHES=8
+export NUMWORKERS=32
+export WARMUP=4000
+
 envsubst < kube.yaml | kubectl create -f -
+

@@ -25,3 +25,6 @@ Library Details:
 
 To use the provided `main.py`:
 Put all text you want to train on in `training_text.py`, and all text for validation in `validation_text.py`. Then run `main.py`.
+
+Model initialization scheme:
+As described in the README for [minGPT initialization scheme](https://github.com/karpathy/minGPT/blob/master/README.md) which are sourced from the GPT-1 and GPT-2 papers and repos, we initialize all standard linear layers + embedding with a normal dist. with mean 0 and std 0.02. All bias vectors are initialized to 0. For the forward pass in the `DecoderBlock`, we initialize the weights of the projection Linear layer in the `MultiHeadedAttention` module to be `1/sqrt(num layers)` at initialization -- effectively scaling down the attention outputs and having MLP part of the decoder contribute most during early training. 

@@ -17,7 +17,7 @@ class GPT(pl.LightningModule):
         optimizer: Union[Type[nn.Module], partial(nn.Module)],
         scheduler: Union[Type[nn.Module], partial(nn.Module)] = None,
         vocab_size: int = 50304,
-        n_blocks: int = 6,
+        n_layers: int = 6,
         n_heads: int = 4,
         n_embd: int = 64,
         context_length: int = 64,
@@ -41,7 +41,7 @@ class GPT(pl.LightningModule):
 
         self.base_model = GPTModel(
             vocab_size=vocab_size,
-            n_blocks=n_blocks,
+            n_layers=n_layers,
             n_heads=n_heads,
             n_embd=n_embd,
             context_length=context_length,
@@ -65,6 +65,7 @@ class GPT(pl.LightningModule):
             result = self.metrics.compute_step(phase=phase, preds=logits, targets=targets, log_every_n_steps=log_every_n_steps)
             if result is not None:
                 self.logger.log_metrics(result)
+                self.logger.save()
 
         loss = F.cross_entropy(logits, targets)
         self.log(f"{phase}_loss", loss, on_step=True, on_epoch=True)
@@ -96,11 +97,13 @@ class GPT(pl.LightningModule):
         if self.metrics:
             result = self.metrics.compute_epoch("train")
             self.logger.log_metrics(result)
+            self.logger.save()
 
     def on_validation_epoch_end(self) -> None:
         if self.metrics:
             result = self.metrics.compute_epoch("val")
             self.logger.log_metrics(result)
+            self.logger.save()
 
     def optimizer_step(
         self,

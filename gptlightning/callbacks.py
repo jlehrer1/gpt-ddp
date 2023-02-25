@@ -120,8 +120,7 @@ class UploadCheckpointToS3(Callback):
 
         trainer.save_checkpoint(checkpoint_path)
 
-        print(f"Uploading checkpoint at epoch {epoch}")
-
+        print(f"Uploading checkpoint at epoch {epoch} and step {step}")
         try:
             self.s3_resource.Bucket(self.bucket).upload_file(
                 Filename=checkpoint_path,

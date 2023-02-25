@@ -7,6 +7,7 @@ import torch
 import torchmetrics as tm
 from pytorch_lightning.loggers import WandbLogger
 from torch.optim import Adam
+from torch.optim.lr_scheduler import CosineAnnealingLR
 from torch.utils.data import DataLoader
 from transformers import AutoTokenizer
 
@@ -22,13 +23,15 @@ if __name__ == "__main__":
     parser.add_argument("--name", default="GPT Model", type=str)
 
     # model hparams
-    parser.add_argument("--context-length", default=64, type=int)
-    parser.add_argument("--n-blocks", default=4, type=int)
-    parser.add_argument("--n-heads", default=4, type=int)
-    parser.add_argument("--n-embd", default=64, type=int)
+    parser.add_argument("--context-length", default=32, type=int)
+    parser.add_argument("--n-layers", default=4, type=int)
+    parser.add_argument("--n-heads", default=2, type=int)
+    parser.add_argument("--n-embd", default=32, type=int)
 
     # optimizer hparams
     parser.add_argument("--lr", default=3e-4, type=float)
+    parser.add_argument("--accumulate-batches", default=None, type=int)
+    parser.add_argument("--warmup", default=4000, type=int)
     args = parser.parse_args()
 
     # dataloader params
@@ -39,10 +42,10 @@ if __name__ == "__main__":
     )
 
     # model params
-    context_length, n_blocks, n_heads, n_embd = args.context_length, args.n_blocks, args.n_heads, args.n_embd
+    context_length, n_layers, n_heads, n_embd = args.context_length, args.n_layers, args.n_heads, args.n_embd
 
     # optimizer params
-    lr = args.lr
+    lr, accumulate_batches, warmup = args.lr, args.accumulate_batches, args.warmup
 
     device = "gpu" if torch.cuda.is_available() else None
 
@@ -60,6 +63,19 @@ if __name__ == "__main__":
 
     print("Generating tokenizer")
     tokenizer = AutoTokenizer.from_pretrained("gpt2")
+
+    print("Setting up model")
+    model = GPT(
+        optimizer=Adam,
+        vocab_size=tokenizer.vocab_size,
+        tokenizer=tokenizer,
+        context_length=context_length,
+        n_layers=n_layers,
+        n_embd=n_embd,
+        n_heads=n_heads,
+        learning_rate=lr,
+        warmup_iter=warmup,
+    )
 
     print("Setting up datasets")
     traindata = AutoRegressiveTextSampler(
@@ -94,21 +110,17 @@ if __name__ == "__main__":
         phases=["train", "val"],
     )
 
-    model = GPT(
-        optimizer=Adam,
-        vocab_size=tokenizer.vocab_size,
-        tokenizer=tokenizer,
-        context_length=context_length,
-        n_blocks=n_blocks,
-        n_embd=n_embd,
-        n_heads=n_heads,
-        learning_rate=lr,
-        warmup_iter=4000,
-    )
-
     # set up callbacks
     sample_text_generator = SampleTextGenerationCallback(
         prompt="Breaking news, Barack Obama has ",
+        every_n_epochs=1,
+        every_n_batches=10,
+        log_wandb=True,
+        new_tokens=100,
+    )
+
+    sample_text_generator2 = SampleTextGenerationCallback(
+        prompt="It's a beautiful day for ",
         every_n_epochs=1,
         every_n_batches=10,
         log_wandb=True,
@@ -127,7 +139,7 @@ if __name__ == "__main__":
 
     upload_callback = UploadCheckpointToS3(
         path="./checkpoints",
-        desc=f"{name}-checkpoint-heads-{n_heads}-blocks-{n_blocks}-nembd-{n_embd}",
+        desc=f"{name}-checkpoint-heads-{n_heads}-blocks-{n_layers}-nembd-{n_embd}",
         s3_resource=s3,
         bucket="braingeneersdev",
         upload_prefix="jlehrer/gpt_model/",
@@ -140,16 +152,18 @@ if __name__ == "__main__":
         devices=1 if device == "gpu" else None,
         max_epochs=500,
         logger=WandbLogger(
-            name=f"{name}-heads-{n_heads}-blocks-{n_blocks}-nembd-{n_embd}",
-            project="Language Modeling (with Warmup)",
-            offline=True,
+            name=f"{name}-heads-{n_heads}-blocks-{n_layers}-nembd-{n_embd}-accum-{accumulate_batches}",
+            project="Language Modeling",
         ),
         callbacks=[
             sample_text_generator,
+            sample_text_generator2,
             upload_callback,
         ],
         limit_val_batches=1000,
         track_grad_norm=True,
+        accumulate_grad_batches=accumulate_batches if accumulate_batches > 0 else None,
+        gradient_clip_val=4,
     )
 
     print("Beginning training phase")
