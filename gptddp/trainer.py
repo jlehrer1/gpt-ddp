@@ -1,6 +1,6 @@
 import os
 from functools import partial
-from typing import Type, Union
+from typing import Optional, Type, Union
 
 import torch
 import torch.nn as nn
@@ -20,11 +20,39 @@ class ModelTrainer:
         lr_scheduler: Union[Type[nn.Module], partial(nn.Module)],
         criterion: nn.Module,
         max_epochs: int,
-        callbacks: list[nn.Module] = None,
-        log_every_n_steps: int = 50,
-        limit_val_batches: int = None,
-        limit_train_batches: int = None,
+        callbacks: Optional[list[nn.Module]] = None,
+        log_every_n_steps: Optional[int] = 50,
+        limit_val_batches: Optional[int] = None,
+        limit_train_batches: Optional[int] = None,
+        val_loop_every_n_steps: Optional[int] = None,
     ) -> None:
+        """Class train model using distributed data parallism.
+        Handles setting up dataloaders + model layers (i.e. batchnorm)
+        for DDP training
+
+        :param model: Base torch model to train
+        :type model: nn.Module
+        :param traindata: torch dataset to train on
+        :type traindata: Dataset
+        :param valdata: torch dataset to use for val loop
+        :type valdata: Dataset
+        :param optimizer: torch optimizer, not initialized with model params
+        :type optimizer: Union[Type[nn.Module], partial
+        :param lr_scheduler: torch lr scheduler, not initialized with model params
+        :type lr_scheduler: Union[Type[nn.Module], partial
+        :param criterion: loss definition, i.e. CrossEntropyLoss
+        :type criterion: nn.Module
+        :param max_epochs: number of epochs to train for
+        :type max_epochs: int
+        :param callbacks: List of callbacks to use, defaults to None
+        :type callbacks: list[nn.Module], optional
+        :param log_every_n_steps: Number of steps to log metrics at, defaults to 50
+        :type log_every_n_steps: int, optional
+        :param limit_val_batches: Number of val batches to use in val phase, defaults to None
+        :type limit_val_batches: int, optional
+        :param limit_train_batches: Number of training batches to use in train phase, defaults to None
+        :type limit_train_batches: int, optional
+        """
         self.traindata = traindata
         self.valdata = valdata
 
@@ -38,6 +66,7 @@ class ModelTrainer:
         self.log_every_n_steps = log_every_n_steps
         self.limit_val_batches = limit_val_batches
         self.limit_train_batches = limit_train_batches
+        self.val_loop_every_n_steps = val_loop_every_n_steps
 
         # set up gpu for ddp training
         self.gpu_id = int(os.environ["LOCAL_RANK"])
@@ -86,7 +115,6 @@ class ModelTrainer:
         #         pg["lr"] = lr_scale * self.learning_rate
 
         self.optimizer.step()
-
         self.trainloss.append(loss.cpu().item())
 
         # only run callbacks on main process
@@ -119,10 +147,15 @@ class ModelTrainer:
             self.training_step(batch=batch, batch_idx=i)
             self.trainstep += 1
 
+            if self.val_loop_every_n_steps is not None and i % self.val_loop_every_n_steps == 0:
+                self.validation_epoch()
+
         if self.gpu_id == 0:
             if self.callbacks is not None:
                 for callback in self.callbacks:
                     callback.on_training_epoch_end(self)
+
+        self.trainloss = []
 
     def validation_epoch(self):
         assert hasattr(self, "valloader"), "Must run setup_dataloaders before training epoch"
@@ -137,6 +170,8 @@ class ModelTrainer:
             if self.callbacks is not None:
                 for callback in self.callbacks:
                     callback.on_validation_epoch_end(self)
+
+        self.valloss = []
 
     def run(self):
         for epoch in tqdm(range(self.max_epochs)):

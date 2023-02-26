@@ -16,7 +16,6 @@ RUN curl -L https://bit.ly/glances | /bin/bash
 
 RUN pip install 'matplotlib<3.7' \
     seaborn \
-    pytorch-lightning \
     wandb \
     sklearn \
     boto3 \ 

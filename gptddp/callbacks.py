@@ -199,16 +199,23 @@ class WandbMetricsCallback(ModelCallback):
 
         self.epoch_metrics_container = {phase: {name: [] for name in self.metrics} for phase in self.phases}
 
-        self.phase_steps = {phase: 0 for phase in self.phases}
-
         self.gpu_id = int(os.environ["LOCAL_RANK"])
 
         if self.gpu_id == 0:
             wandb.init(project=project, name=name)
 
-    def compute_step(
-        self, phase: str, preds: torch.Tensor, targets: torch.Tensor, log_every_n_steps: int
-    ) -> Optional[dict[str, Any]]:
+    def compute_step(self, phase: str, preds: torch.Tensor, targets: torch.Tensor) -> Optional[dict[str, Any]]:
+        """Calculates all metrics and logs them to wandb
+
+        :param phase: model phase, i.e. train or val
+        :type phase: str
+        :param preds: tensor of model predictions (logits)
+        :type preds: torch.Tensor
+        :param targets: tensor of ground truth labels
+        :type targets: torch.Tensor
+        :return: dictionary containing the metric name for the given phase and its value
+        :rtype: Optional[dict[str, Any]]
+        """
         assert phase in self.phases, f"Phase {phase} not in phases set at initiliazation"
         curr_step_metrics = None
 
@@ -220,16 +227,18 @@ class WandbMetricsCallback(ModelCallback):
             except AttributeError:
                 print(f"Metric {metric} did not return a float, not logging and continuing...")
 
-        # update phase step since we calculated the metric
-        self.phase_steps[phase] += 1
-
-        # only return the dict if we're logging on this step
-        if self.phase_steps[phase] % log_every_n_steps == 0:
-            curr_step_metrics = {f"{phase}_{metric}": self.step_metrics_container[phase][metric] for metric in self.metrics}
+        curr_step_metrics = {f"{phase}_{metric}": self.step_metrics_container[phase][metric] for metric in self.metrics}
 
         return curr_step_metrics
 
     def compute_epoch(self, phase: str) -> dict[str, float]:
+        """Computes the epoch-level metrics given the metric state across all batches from the current phase
+
+        :param phase: model phase to calculate metrics for, i.e train or val
+        :type phase: str
+        :return: dictionary of results
+        :rtype: dict[str, float]
+        """
         # store epoch metrics for "best metric" logging
         for metric in self.metrics:
             try:
@@ -263,26 +272,33 @@ class WandbMetricsCallback(ModelCallback):
     # but initialization I'm not sure, that's why we have the conditional
     def on_train_batch_end(self, modeltrainer: ModelTrainer, batch: tuple[torch.Tensor], outputs: torch.Tensor, batch_idx: int):
         _, targets = batch
-        metric_results = self.compute_step(
-            phase="train", preds=outputs, targets=targets, log_every_n_steps=modeltrainer.log_every_n_steps
-        )
-
-        wandb.log(metric_results)
+        if modeltrainer.trainstep % modeltrainer.log_every_n_steps == 0:
+            metric_results = self.compute_step(phase="train", preds=outputs, targets=targets)
+            metric_results["train_loss"] = modeltrainer.trainloss[-1]
+            metric_results["train_step"] = modeltrainer.trainstep
+            metric_results["global_step"] = modeltrainer.trainstep + modeltrainer.valstep
+            wandb.log(metric_results)
 
     def on_validation_batch_end(
         self, modeltrainer: ModelTrainer, batch: tuple[torch.Tensor], outputs: torch.Tensor, batch_idx: int
     ):
-        _, targets = batch
-        metric_results = self.compute_step(
-            phase="validation", preds=outputs, targets=targets, log_every_n_steps=modeltrainer.log_every_n_steps
-        )
+        if modeltrainer.valstep % modeltrainer.log_every_n_steps == 0:
+            _, targets = batch
 
-        wandb.log(metric_results)
+            metric_results = self.compute_step(phase="validation", preds=outputs, targets=targets)
+            metric_results["validation_loss"] = modeltrainer.valloss[-1]
+            metric_results["validation_step"] = modeltrainer.valstep
+            metric_results["global_step"] = modeltrainer.trainstep + modeltrainer.valstep
+            wandb.log(metric_results)
 
     def on_train_epoch_end(self, modeltrainer: ModelTrainer):
         metric_results = self.compute_epoch("train")
+        metric_results["train_loss"] = np.mean(modeltrainer.trainloss)
+        metric_results["epoch"] = modeltrainer.epoch
         wandb.log(metric_results)
 
     def on_validation_epoch_end(self, modeltrainer: ModelTrainer):
         metric_results = self.compute_epoch("validation")
+        metric_results["validation_loss"] = np.mean(modeltrainer.valloss)
+        metric_results["epoch"] = modeltrainer.epoch
         wandb.log(metric_results)

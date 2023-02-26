@@ -3,7 +3,7 @@ kind: Job
 metadata:
   name: gpt-cl-${CONTEXTLENGTH}-layers-${NLAYERS}-heads-${NHEADS}-b-${BATCHSIZE}-lr-${LR}-acc-${ACCUMBATCHES}-warmup-${WARMUP}-gpu-${NGPU}
 spec:
-  backoffLimit: 2
+  backoffLimit: 0
   completions: 1
   template:
     metadata:
