@@ -5,6 +5,7 @@ import pytorch_lightning as pl
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torch.utils.data import DataLoader
 from transformers import AutoTokenizer
 
 from gptlightning.metrics import Metrics

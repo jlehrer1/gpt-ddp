@@ -13,10 +13,10 @@ from transformers import AutoTokenizer
 
 import wandb
 from gptlightning import (GPT, AutoRegressiveTextSampler, Metrics,
-                          SampleTextGenerationCallback, UploadCheckpointToS3)
+                          SampleTextGenerationCallback, TextSequenceModule,
+                          UploadCheckpointToS3)
 
 if __name__ == "__main__":
-    wandb.init()
     # set up parser for command line args
     parser = argparse.ArgumentParser()
 
@@ -48,6 +48,13 @@ if __name__ == "__main__":
 
     # optimizer params
     lr, accumulate_batches, warmup = args.lr, args.accumulate_batches, args.warmup
+
+    num_devices = torch.cuda.device_count()
+
+    # set up wandb
+    project = "Language Modeling TEST"
+    name = f"{name}-heads-{n_heads}-blocks-{n_layers}-nembd-{n_embd}-accum-{accumulate_batches}-gpu-{num_devices}"
+    wandb.init(project=project, name=name)
 
     # Text file containing all text you want to train on
     with open("training_data.txt") as f:
@@ -90,17 +97,7 @@ if __name__ == "__main__":
         tokenizer=tokenizer,
     )
 
-    trainloader = DataLoader(
-        traindata,
-        batch_size=batch_size,
-        num_workers=num_workers,
-    )
-    valloader = DataLoader(
-        valdata,
-        batch_size=batch_size,
-        num_workers=num_workers,
-    )
-
+    datamodule = TextSequenceModule(train_dataset=traindata, val_dataset=valdata, batch_size=batch_size, num_workers=num_workers)
     print("Setting up model")
     # set up metrics
     metrics = Metrics(
@@ -148,16 +145,15 @@ if __name__ == "__main__":
     )
 
     device = "gpu" if torch.cuda.is_available() else "cpu"
-    num_devices = torch.cuda.device_count()
     print(f"Total number of CUDA accelerators is {num_devices}")
     trainer = pl.Trainer(
         accelerator=device if device else None,
         devices=num_devices if device else None,
-        strategy="ddp" if device else None,
+        strategy="ddp" if num_devices > 1 else None,
         max_epochs=500,
         logger=WandbLogger(
-            name=f"{name}-heads-{n_heads}-blocks-{n_layers}-nembd-{n_embd}-accum-{accumulate_batches}-gpu-{num_devices}",
-            project="Language Modeling TEST",
+            name=name,
+            project=project,
         ),
         callbacks=[
             sample_text_generator,
@@ -168,7 +164,9 @@ if __name__ == "__main__":
         track_grad_norm=True,
         accumulate_grad_batches=accumulate_batches if accumulate_batches > 0 else None,
         gradient_clip_val=1,
+        val_check_interval=5000,
+        auto_scale_batch_size="power",
     )
 
     print("Beginning training phase")
-    trainer.fit(model, trainloader, valloader)
+    trainer.fit(model, datamodule=datamodule)
