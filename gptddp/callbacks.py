@@ -43,7 +43,9 @@ class SampleTextGenerationCallback(ModelCallback):
         prompt: str = None,
         new_tokens: int = 1000,
         log_wandb: bool = False,
+        quiet: bool = False,
     ) -> None:
+        super().__init__(quiet=quiet)
         self.write_path = write_path
         self.every_n_epochs = every_n_epochs
         self.every_n_batches = every_n_batches
@@ -120,7 +122,9 @@ class UploadCheckpointToS3(ModelCallback):
         upload_prefix: int = "model_checkpoints",
         n_epochs: int = 10,
         n_steps: int = None,
+        quiet: bool = False,
     ) -> None:
+        super().__init__(quiet=quiet)
         self.path = path
         self.desc = desc
 
@@ -185,7 +189,7 @@ class WandbMetricsCallback(ModelCallback):
     """A wrapper class for logging multiple metrics from
     torchmetrics"""
 
-    def __init__(self, metrics: dict[str, tm.Metric], phases: list[str], project: str, name: str) -> None:
+    def __init__(self, metrics: dict[str, tm.Metric], phases: list[str], project: str, name: str, quiet: bool = False) -> None:
         """A class for logging metrics
 
         :param metrics: A dictionary of {name: Metric class} to log
@@ -193,20 +197,21 @@ class WandbMetricsCallback(ModelCallback):
         :param phases: A list of phases to log for, will be shown in wandb this way
         :type phases: list[str]
         """
-        super().__init__()
+        super().__init__(quiet=quiet)
+        self.gpu_id = int(os.environ["LOCAL_RANK"])
+
+        if self.gpu_id == 0:
+            wandb.init(project=project, name=name)
+
         self.metrics = metrics
         self.phases = phases
 
-        self.phase_metrics = {phase: {name: deepcopy(metric) for name, metric in self.metrics.items()} for phase in self.phases}
+        self.phase_metrics = {phase: {name: deepcopy(metric).to(self.gpu_id) for name, metric in self.metrics.items()} for phase in self.phases}
 
         self.step_metrics_container = {phase: {name: 0 for name in self.metrics} for phase in self.phases}
 
         self.epoch_metrics_container = {phase: {name: [] for name in self.metrics} for phase in self.phases}
 
-        self.gpu_id = int(os.environ["LOCAL_RANK"])
-
-        if self.gpu_id == 0:
-            wandb.init(project=project, name=name)
 
     def compute_step(self, phase: str, preds: torch.Tensor, targets: torch.Tensor) -> Optional[dict[str, Any]]:
         """Calculates all metrics and logs them to wandb
