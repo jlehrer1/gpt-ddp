@@ -1,16 +1,38 @@
 import os
+from copy import deepcopy
 from typing import *
+from typing import Any, Optional
 
 import boto3
+import numpy as np
 import pytorch_lightning as pl
 import torch
-from pytorch_lightning.callbacks import Callback
-from pytorch_lightning.utilities import rank_zero_only
+import torchmetrics as tm
 
 import wandb
+from gptlightning.trainer import ModelTrainer
 
 
-class SampleTextGenerationCallback(Callback):
+class ModelCallback:
+    def __init__(self) -> None:
+        pass
+
+    def on_train_batch_end(self, modeltrainer: ModelTrainer, batch: tuple[torch.Tensor], outputs: torch.Tensor, batch_idx: int):
+        pass
+
+    def on_validation_batch_end(
+        self, modeltrainer: ModelTrainer, batch: tuple[torch.Tensor], outputs: torch.Tensor, batch_idx: int
+    ):
+        pass
+
+    def on_train_epoch_end(self, modeltrainer: ModelTrainer):
+        pass
+
+    def on_validation_epoch_end(self, modeltrainer: ModelTrainer):
+        pass
+
+
+class SampleTextGenerationCallback(ModelCallback):
     def __init__(
         self,
         write_path: str = "./sample_output",
@@ -20,7 +42,6 @@ class SampleTextGenerationCallback(Callback):
         new_tokens: int = 1000,
         log_wandb: bool = False,
     ) -> None:
-        super().__init__()
         self.write_path = write_path
         self.every_n_epochs = every_n_epochs
         self.every_n_batches = every_n_batches
@@ -31,10 +52,9 @@ class SampleTextGenerationCallback(Callback):
 
         os.makedirs(write_path, exist_ok=True)
 
-    @rank_zero_only
-    def _sample_output_from_prompt(self, pl_module: pl.LightningModule, epoch: int, step: int):
+    def _sample_output_from_prompt(self, modeltrainer: ModelTrainer, epoch: int, step: int):
         prompt = torch.zeros((1, 1), dtype=torch.long) if self.prompt is None else self.prompt
-        text = pl_module.base_model.generate(
+        text = modeltrainer.model.generate(
             prompt,
             max_new_tokens=self.new_tokens,
         )
@@ -61,31 +81,25 @@ class SampleTextGenerationCallback(Callback):
             table.add_data(epoch, step, " ".join(text))
             wandb.log({f"Text Generation Prompt={'No Prompt' if self.prompt is None else self.prompt[0: 100]} (etc.)": table})
 
-    @rank_zero_only
-    def on_train_epoch_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule) -> None:
-        curr_epoch = pl_module.current_epoch
-        step = pl_module.global_step
+    def on_train_batch_end(
+        self,
+        modeltrainer: ModelTrainer,
+        batch: tuple[torch.Tensor],
+        outputs: torch.Tensor,
+        batch_idx: int,
+    ) -> None:
+        if batch_idx % self.every_n_batches == 0:
+            self._sample_output_from_prompt(modeltrainer, modeltrainer.epoch, modeltrainer.traintep)
+
+    def on_train_epoch_end(self, modeltrainer: ModelTrainer) -> None:
+        curr_epoch = modeltrainer.epoch
 
         if curr_epoch % self.every_n_epochs == 0:
             # generate writing sample just from "empty" prompt
-            self._sample_output_from_prompt(pl_module=pl_module, epoch=curr_epoch, step=step)
-
-    @rank_zero_only
-    def on_train_batch_end(
-        self,
-        trainer: "pl.Trainer",
-        pl_module: "pl.LightningModule",
-        outputs: torch.Tensor,
-        batch: Any,
-        batch_idx: int,
-        unused: int = 0,
-    ) -> None:
-        if batch_idx % self.every_n_batches == 0:
-            epoch = pl_module.current_epoch
-            self._sample_output_from_prompt(pl_module=pl_module, epoch=epoch, step=batch_idx)
+            self._sample_output_from_prompt(modeltrainer, curr_epoch, modeltrainer.trainstep)
 
 
-class UploadCheckpointToS3(Callback):
+class UploadCheckpointToS3(ModelCallback):
     """Custom PyTorch callback for uploading model checkpoints to a s3_resource bucket using a boto3
     resource object.
 
@@ -105,7 +119,6 @@ class UploadCheckpointToS3(Callback):
         n_epochs: int = 10,
         n_steps: int = None,
     ) -> None:
-        super().__init__()
         self.path = path
         self.desc = desc
 
@@ -118,12 +131,22 @@ class UploadCheckpointToS3(Callback):
 
         os.makedirs(self.path, exist_ok=True)
 
-    @rank_zero_only
-    def _save_and_upload_checkpoint(self, trainer: pl.Trainer, epoch: int, step: int) -> None:
+    def _save_and_upload_checkpoint(self, modeltrainer: ModelTrainer, epoch: int, step: int) -> None:
         checkpoint = f"checkpoint-{epoch}-step-{step}-desc-{self.desc}.ckpt"
         checkpoint_path = os.path.join(self.path, checkpoint)
 
-        trainer.save_checkpoint(checkpoint_path)
+        model = modeltrainer.model
+        optimizer = modeltrainer.optimizer
+
+        torch.save(
+            {
+                "epoch": epoch,
+                "model_state_dict": model.state_dict(),
+                "optimizer_state_dict": optimizer.state_dict(),
+                "loss": np.mean(modeltrainer.valloss),
+            },
+            checkpoint_path,
+        )
 
         print(f"Uploading checkpoint at epoch {epoch} and step {step}")
         try:
@@ -135,20 +158,133 @@ class UploadCheckpointToS3(Callback):
             print(f"Error when uploading on epoch {epoch}")
             print(e)
 
-    @rank_zero_only
     def on_train_batch_end(
-        self, trainer: "pl.Trainer", pl_module: "pl.LightningModule", outputs: torch.Tensor, batch: Any, batch_idx: int
+        self,
+        modeltrainer: ModelTrainer,
+        batch: tuple[torch.Tensor],
+        outputs: torch.Tensor,
+        batch_idx: int,
     ) -> None:
-        epoch = trainer.current_epoch
-        step = trainer.global_step
+        epoch = modeltrainer.epoch
+        step = modeltrainer.trainstep
 
         if self.n_steps is not None and step % self.n_steps == 0:
-            self._save_and_upload_checkpoint(trainer, epoch, step)
+            self._save_and_upload_checkpoint(modeltrainer, epoch, step)
 
-    @rank_zero_only
-    def on_train_epoch_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule):
-        epoch = trainer.current_epoch
-        step = trainer.global_step
+    def on_train_epoch_end(self, modeltrainer: ModelTrainer):
+        epoch = modeltrainer.epoch
+        step = modeltrainer.trainstep
 
         if epoch % self.n_epochs == 0:  # Save every ten epochs
-            self._save_and_upload_checkpoint(trainer, epoch, step)
+            self._save_and_upload_checkpoint(modeltrainer, epoch, step)
+
+
+class WandbMetricsCallback(ModelCallback):
+    """A wrapper class for logging multiple metrics from
+    torchmetrics"""
+
+    def __init__(self, metrics: dict[str, tm.Metric], phases: list[str], project: str, name: str) -> None:
+        """A class for logging metrics
+
+        :param metrics: A dictionary of {name: Metric class} to log
+        :type metrics: dict[str, tm.Metric]
+        :param phases: A list of phases to log for, will be shown in wandb this way
+        :type phases: list[str]
+        """
+        super().__init__()
+        self.metrics = metrics
+        self.phases = phases
+
+        self.phase_metrics = {phase: {name: deepcopy(metric) for name, metric in self.metrics.items()} for phase in self.phases}
+
+        self.step_metrics_container = {phase: {name: 0 for name in self.metrics} for phase in self.phases}
+
+        self.epoch_metrics_container = {phase: {name: [] for name in self.metrics} for phase in self.phases}
+
+        self.phase_steps = {phase: 0 for phase in self.phases}
+
+        self.gpu_id = int(os.environ["LOCAL_RANK"])
+
+        if self.gpu_id == 0:
+            wandb.init(project=project, name=name)
+
+    def compute_step(
+        self, phase: str, preds: torch.Tensor, targets: torch.Tensor, log_every_n_steps: int
+    ) -> Optional[dict[str, Any]]:
+        assert phase in self.phases, f"Phase {phase} not in phases set at initiliazation"
+        curr_step_metrics = None
+
+        # calculate metric no matter what to update internal state
+        for metric in self.metrics:
+            try:
+                r = self.phase_metrics[phase][metric](preds, targets).item()
+                self.step_metrics_container[phase][metric] = r
+            except AttributeError:
+                print(f"Metric {metric} did not return a float, not logging and continuing...")
+
+        # update phase step since we calculated the metric
+        self.phase_steps[phase] += 1
+
+        # only return the dict if we're logging on this step
+        if self.phase_steps[phase] % log_every_n_steps == 0:
+            curr_step_metrics = {f"{phase}_{metric}": self.step_metrics_container[phase][metric] for metric in self.metrics}
+
+        return curr_step_metrics
+
+    def compute_epoch(self, phase: str) -> dict[str, float]:
+        # store epoch metrics for "best metric" logging
+        for metric in self.metrics:
+            try:
+                r = self.phase_metrics[phase][metric].compute().item()
+                self.epoch_metrics_container[phase][metric].append(r)
+            except AttributeError:  # if .item() is not valid since metric doesnt return a 0dim tensor
+                print(f"Metric {metric} did not return a float, not logging and continuing...")
+
+        # reset the metric classes for next epoch
+        for metric in self.metrics:
+            self.epoch_metrics_container[phase][metric].reset()
+
+        curr_epoch_metrics = {f"{phase}_{metric}": self.epoch_metrics_container[phase][metric][-1] for metric in self.metrics}
+
+        return curr_epoch_metrics
+
+    def finish(self, phase: str) -> dict[str, float]:
+        summary_metrics = {}
+        for metric in self.metrics:
+            best_func = np.argmax if self.phase_metrics[phase][metric].higher_is_better else np.argmin
+
+            summary_metrics[f"{metric}_best_epoch_{phase}"] = best_func(self.epoch_metrics_container[phase][metric])
+
+            best_func = np.maximum if self.phase_metrics[phase][metric].higher_is_better else np.minimum
+            summary_metrics[f"{metric}_best_value_{phase}"] = best_func(self.epoch_metrics_container[phase][metric])
+
+        return summary_metrics
+
+    # all of these Callbacks methods should only get called on the main process by the ModelTrainer
+    # so it should be safe to use wandb.log without checking it it's initialized
+    # but initialization I'm not sure, that's why we have the conditional 
+    def on_train_batch_end(self, modeltrainer: ModelTrainer, batch: tuple[torch.Tensor], outputs: torch.Tensor, batch_idx: int):
+        _, targets = batch
+        metric_results = self.compute_step(
+            phase="train", preds=outputs, targets=targets, log_every_n_steps=modeltrainer.log_every_n_steps
+        )
+
+        wandb.log(metric_results)
+
+    def on_validation_batch_end(
+        self, modeltrainer: ModelTrainer, batch: tuple[torch.Tensor], outputs: torch.Tensor, batch_idx: int
+    ):
+        _, targets = batch
+        metric_results = self.compute_step(
+            phase="validation", preds=outputs, targets=targets, log_every_n_steps=modeltrainer.log_every_n_steps
+        )
+
+        wandb.log(metric_results)
+
+    def on_train_epoch_end(self, modeltrainer: ModelTrainer):
+        metric_results = self.compute_epoch("train")
+        wandb.log(metric_results)
+
+    def on_validation_epoch_end(self, modeltrainer: ModelTrainer):
+        metric_results = self.compute_epoch("validation")
+        wandb.log(metric_results)

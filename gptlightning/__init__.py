@@ -1,14 +1,17 @@
 from gptlightning.callbacks import (SampleTextGenerationCallback,
-                                    UploadCheckpointToS3)
+                                    UploadCheckpointToS3, WandbMetricsCallback)
 from gptlightning.data import AutoRegressiveTextSampler, TextSequenceModule
-from gptlightning.lightning_model import GPT
-from gptlightning.metrics import Metrics
+from gptlightning.ddp_manager import DDPManager
+from gptlightning.model import GPTModel
+from gptlightning.trainer import ModelTrainer
 
 __all__ = [
-    "GPT",
     "AutoRegressiveTextSampler",
     "SampleTextGenerationCallback",
     "UploadCheckpointToS3",
-    "Metrics",
+    "WandbMetricsCallback",
     "TextSequenceModule",
+    "ModelTrainer",
+    "DDPManager",
+    "GPTModel",
 ]

@@ -67,29 +67,3 @@ class AutoRegressiveTextSampler(Dataset):
 
     def __len__(self):
         return len(self.text) - self.context_length
-
-
-class TextSequenceModule(pl.LightningDataModule):
-    """Wrapper around generating trainloader/valloader
-    This exists so we can use the auto batch size finder from Lightning
-    which requires a datamodule with the batch_size parameter"""
-
-    def __init__(
-        self,
-        train_dataset: AutoRegressiveTextSampler,
-        val_dataset: AutoRegressiveTextSampler,
-        batch_size: int,
-        num_workers: int = None,
-    ) -> None:
-        super().__init__()
-
-        self.train_dataset = train_dataset
-        self.val_dataset = val_dataset
-        self.batch_size = batch_size
-        self.num_workers = num_workers if num_workers is not None else os.cpu_count()
-
-    def train_dataloader(self) -> DataLoader:
-        return DataLoader(self.train_dataset, batch_size=self.batch_size, num_workers=self.num_workers)
-
-    def val_dataloader(self) -> DataLoader:
-        return DataLoader(self.val_dataset, batch_size=self.batch_size, num_workers=self.num_workers)

@@ -2,19 +2,16 @@ import argparse
 from functools import partial
 
 import boto3
-import pytorch_lightning as pl
 import torch
+import torch.nn as nn
 import torchmetrics as tm
-from pytorch_lightning.loggers import WandbLogger
 from torch.optim import Adam
-from torch.optim.lr_scheduler import CosineAnnealingLR
-from torch.utils.data import DataLoader
 from transformers import AutoTokenizer
 
 import wandb
-from gptlightning import (GPT, AutoRegressiveTextSampler, Metrics,
-                          SampleTextGenerationCallback, TextSequenceModule,
-                          UploadCheckpointToS3)
+from gptlightning import (AutoRegressiveTextSampler, DDPManager, GPTModel,
+                          ModelTrainer, SampleTextGenerationCallback,
+                        UploadCheckpointToS3, WandbMetricsCallback)
 
 if __name__ == "__main__":
     # set up parser for command line args
@@ -49,13 +46,6 @@ if __name__ == "__main__":
     # optimizer params
     lr, accumulate_batches, warmup = args.lr, args.accumulate_batches, args.warmup
 
-    num_devices = torch.cuda.device_count()
-
-    # set up wandb
-    project = "Language Modeling TEST"
-    name = f"{name}-heads-{n_heads}-blocks-{n_layers}-nembd-{n_embd}-accum-{accumulate_batches}-gpu-{num_devices}"
-    wandb.init(project=project, name=name)
-
     # Text file containing all text you want to train on
     with open("training_data.txt") as f:
         traintext = f.read()
@@ -68,105 +58,91 @@ if __name__ == "__main__":
     traintext = traintext.split(" ")
     valtext = valtext.split(" ")
 
-    print("Generating tokenizer")
-    tokenizer = AutoTokenizer.from_pretrained("gpt2")
+    with DDPManager():
+        print("Generating tokenizer")
+        tokenizer = AutoTokenizer.from_pretrained("gpt2")
 
-    print("Setting up model")
-    model = GPT(
-        optimizer=Adam,
-        vocab_size=tokenizer.vocab_size,
-        tokenizer=tokenizer,
-        context_length=context_length,
-        n_layers=n_layers,
-        n_embd=n_embd,
-        n_heads=n_heads,
-        learning_rate=lr,
-        warmup_iter=warmup,
-    )
+        print("Setting up model")
+        model = GPTModel(
+            vocab_size=tokenizer.vocab_size,
+            tokenizer=tokenizer,
+            context_length=context_length,
+            n_layers=n_layers,
+            n_embd=n_embd,
+            n_heads=n_heads,
+        )
 
-    print("Setting up datasets")
-    traindata = AutoRegressiveTextSampler(
-        text=traintext,
-        context_length=context_length,
-        tokenizer=tokenizer,
-    )
+        print("Setting up datasets")
+        traindata = AutoRegressiveTextSampler(
+            text=traintext,
+            context_length=context_length,
+            tokenizer=tokenizer,
+        )
 
-    valdata = AutoRegressiveTextSampler(
-        text=valtext,
-        context_length=context_length,
-        tokenizer=tokenizer,
-    )
+        valdata = AutoRegressiveTextSampler(
+            text=valtext,
+            context_length=context_length,
+            tokenizer=tokenizer,
+        )
 
-    datamodule = TextSequenceModule(train_dataset=traindata, val_dataset=valdata, batch_size=batch_size, num_workers=num_workers)
-    print("Setting up model")
-    # set up metrics
-    metrics = Metrics(
-        metrics={
-            "perplexity": tm.Perplexity(),
-        },
-        phases=["train", "val"],
-    )
+        print("Setting up model")
+        # set up metrics
+        num_devices = torch.cuda.device_count()
+        metrics = WandbMetricsCallback(
+            metrics={
+                "perplexity": tm.Perplexity(),
+            },
+            phases=["train", "validation"],
+            project = "Language Modeling DDP TEST",
+            name = f"{name}-heads-{n_heads}-blocks-{n_layers}-nembd-{n_embd}-accum-{accumulate_batches}-gpu-{num_devices}"
+        )
 
-    # set up callbacks
-    sample_text_generator = SampleTextGenerationCallback(
-        prompt="Breaking news, Barack Obama has ",
-        every_n_epochs=1,
-        every_n_batches=10,
-        log_wandb=True,
-        new_tokens=100,
-    )
+        sample_text_generator = SampleTextGenerationCallback(
+            prompt="It's a beautiful day for ",
+            every_n_epochs=1,
+            every_n_batches=10,
+            log_wandb=True,
+            new_tokens=100,
+        )
 
-    sample_text_generator2 = SampleTextGenerationCallback(
-        prompt="It's a beautiful day for ",
-        every_n_epochs=1,
-        every_n_batches=10,
-        log_wandb=True,
-        new_tokens=100,
-    )
+        with open("credentials") as f:
+            key, access = [line.rstrip() for line in f.readlines()]
 
-    with open("credentials") as f:
-        key, access = [line.rstrip() for line in f.readlines()]
+        s3 = boto3.resource(
+            "s3",
+            endpoint_url="https://s3-west.nrp-nautilus.io/",
+            aws_access_key_id=key,
+            aws_secret_access_key=access,
+        )
 
-    s3 = boto3.resource(
-        "s3",
-        endpoint_url="https://s3-west.nrp-nautilus.io/",
-        aws_access_key_id=key,
-        aws_secret_access_key=access,
-    )
+        upload_callback = UploadCheckpointToS3(
+            path="./checkpoints",
+            desc=f"{name}-checkpoint-heads-{n_heads}-blocks-{n_layers}-nembd-{n_embd}",
+            s3_resource=s3,
+            bucket="braingeneersdev",
+            upload_prefix="jlehrer/gpt_model/",
+            n_epochs=1,
+            n_steps=50000,
+        )
 
-    upload_callback = UploadCheckpointToS3(
-        path="./checkpoints",
-        desc=f"{name}-checkpoint-heads-{n_heads}-blocks-{n_layers}-nembd-{n_embd}",
-        s3_resource=s3,
-        bucket="braingeneersdev",
-        upload_prefix="jlehrer/gpt_model/",
-        n_epochs=1,
-        n_steps=50000,
-    )
+        trainer = ModelTrainer(
+            model=model,
+            traindata=traindata,
+            valdata=valdata,
+            optimizer=partial(Adam, lr=lr),
+            lr_scheduler=None,
+            criterion=nn.CrossEntropyLoss(),
+            max_epochs=1,
+            callbacks=[
+                sample_text_generator,
+                upload_callback,
+                metrics,
+            ],
+            metrics=metrics,
+            log_every_n_steps=50,
+            limit_train_batches=None,
+            limit_val_batches=1000,
+        )
 
-    device = "gpu" if torch.cuda.is_available() else "cpu"
-    print(f"Total number of CUDA accelerators is {num_devices}")
-    trainer = pl.Trainer(
-        accelerator=device if device else None,
-        devices=num_devices if device else None,
-        strategy="ddp" if num_devices > 1 else None,
-        max_epochs=500,
-        logger=WandbLogger(
-            name=name,
-            project=project,
-        ),
-        callbacks=[
-            sample_text_generator,
-            sample_text_generator2,
-            upload_callback,
-        ],
-        limit_val_batches=1000,
-        track_grad_norm=True,
-        accumulate_grad_batches=accumulate_batches if accumulate_batches > 0 else None,
-        gradient_clip_val=1,
-        val_check_interval=5000,
-        auto_scale_batch_size="power",
-    )
-
-    print("Beginning training phase")
-    trainer.fit(model, datamodule=datamodule)
+        trainer.setup_dataloaders(batch_size=batch_size, num_workers=num_workers)
+        trainer.run()
