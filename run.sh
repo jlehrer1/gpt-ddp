@@ -1,4 +1,4 @@
-export BATCHSIZE=64
+export BATCHSIZE=32
 export CONTEXTLENGTH=256
 export NLAYERS=24
 export NHEADS=4

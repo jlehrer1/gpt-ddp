@@ -206,12 +206,13 @@ class WandbMetricsCallback(ModelCallback):
         self.metrics = metrics
         self.phases = phases
 
-        self.phase_metrics = {phase: {name: deepcopy(metric).to(self.gpu_id) for name, metric in self.metrics.items()} for phase in self.phases}
+        self.phase_metrics = {
+            phase: {name: deepcopy(metric).to(self.gpu_id) for name, metric in self.metrics.items()} for phase in self.phases
+        }
 
         self.step_metrics_container = {phase: {name: 0 for name in self.metrics} for phase in self.phases}
 
         self.epoch_metrics_container = {phase: {name: [] for name in self.metrics} for phase in self.phases}
-
 
     def compute_step(self, phase: str, preds: torch.Tensor, targets: torch.Tensor) -> Optional[dict[str, Any]]:
         """Calculates all metrics and logs them to wandb

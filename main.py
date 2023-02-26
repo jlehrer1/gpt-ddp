@@ -18,8 +18,11 @@ from gptddp import (
     UploadCheckpointToS3,
     WandbMetricsCallback,
 )
+import gc
 
 if __name__ == "__main__":
+    gc.collect()
+    torch.cuda.empty_cache()
     # set up parser for command line args
     parser = argparse.ArgumentParser()
 
