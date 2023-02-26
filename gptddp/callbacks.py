@@ -12,8 +12,12 @@ from gptddp.trainer import ModelTrainer
 
 
 class ModelCallback:
-    def __init__(self) -> None:
-        pass
+    def __init__(self, quiet: bool = False) -> None:
+        self.quiet = quiet
+
+    def silentprint(self, *args, **kwargs):
+        if not self.quiet:
+            print(*args, **kwargs)
 
     def on_train_batch_end(self, modeltrainer: ModelTrainer, batch: tuple[torch.Tensor], outputs: torch.Tensor, batch_idx: int):
         pass
@@ -146,15 +150,15 @@ class UploadCheckpointToS3(ModelCallback):
             checkpoint_path,
         )
 
-        print(f"Uploading checkpoint at epoch {epoch} and step {step}")
+        self.silentprint(f"Uploading checkpoint at epoch {epoch} and step {step}")
         try:
             self.s3_resource.Bucket(self.bucket).upload_file(
                 Filename=checkpoint_path,
                 Key=os.path.join(self.upload_prefix, checkpoint_path.split("/")[-1]),
             )
         except Exception as e:
-            print(f"Error when uploading on epoch {epoch}")
-            print(e)
+            self.silentprint(f"Error when uploading on epoch {epoch}")
+            self.silentprint(e)
 
     def on_train_batch_end(
         self,
@@ -225,7 +229,7 @@ class WandbMetricsCallback(ModelCallback):
                 r = self.phase_metrics[phase][metric](preds, targets).item()
                 self.step_metrics_container[phase][metric] = r
             except AttributeError:
-                print(f"Metric {metric} did not return a float, not logging and continuing...")
+                self.silentprint(f"Metric {metric} did not return a float, not logging and continuing...")
 
         curr_step_metrics = {f"{phase}_{metric}": self.step_metrics_container[phase][metric] for metric in self.metrics}
 
@@ -245,7 +249,7 @@ class WandbMetricsCallback(ModelCallback):
                 r = self.phase_metrics[phase][metric].compute().item()
                 self.epoch_metrics_container[phase][metric].append(r)
             except AttributeError:  # if .item() is not valid since metric doesnt return a 0dim tensor
-                print(f"Metric {metric} did not return a float, not logging and continuing...")
+                self.silentprint(f"Metric {metric} did not return a float, not logging and continuing...")
 
         # reset the metric classes for next epoch
         for metric in self.metrics:

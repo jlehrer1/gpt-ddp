@@ -138,7 +138,7 @@ class ModelTrainer:
     def training_epoch(self):
         assert hasattr(self, "trainloader"), "Must run setup_dataloaders before training epoch"
 
-        for i, batch in enumerate(tqdm(self.trainloader)):
+        for i, batch in enumerate(tqdm(self.trainloader, desc="Training epoch")):
             if self.limit_train_batches is not None and i > self.limit_train_batches:
                 break
 
@@ -158,7 +158,7 @@ class ModelTrainer:
     def validation_epoch(self):
         assert hasattr(self, "valloader"), "Must run setup_dataloaders before training epoch"
 
-        for i, batch in enumerate(tqdm(self.valloader)):
+        for i, batch in enumerate(tqdm(self.valloader, desc="Validation epoch")):
             if self.limit_val_batches is not None and i > self.limit_val_batches:
                 break
             self.validation_step(batch=batch, batch_idx=i)
@@ -172,7 +172,7 @@ class ModelTrainer:
         self.valloss = []
 
     def run(self):
-        for epoch in tqdm(range(self.max_epochs)):
+        for epoch in tqdm(range(self.max_epochs), desc="Full epoch"):
             self.epoch = epoch
             # set these for DDP
             self.trainloader.sampler.set_epoch(epoch)
