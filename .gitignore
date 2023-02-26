@@ -7,4 +7,5 @@ Language*
 credentials
 .eggs/*
 **/.egg-info/*
+*.egg*
 build/*
