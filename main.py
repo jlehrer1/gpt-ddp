@@ -9,9 +9,15 @@ from torch.optim import Adam
 from transformers import AutoTokenizer
 
 import wandb
-from gptddp import (AutoRegressiveTextSampler, DDPManager, GPTModel,
-                    ModelTrainer, SampleTextGenerationCallback,
-                    UploadCheckpointToS3, WandbMetricsCallback)
+from gptddp import (
+    AutoRegressiveTextSampler,
+    DDPManager,
+    GPTModel,
+    ModelTrainer,
+    SampleTextGenerationCallback,
+    UploadCheckpointToS3,
+    WandbMetricsCallback,
+)
 
 if __name__ == "__main__":
     # set up parser for command line args
@@ -70,6 +76,7 @@ if __name__ == "__main__":
             n_layers=n_layers,
             n_embd=n_embd,
             n_heads=n_heads,
+            dropout=0.0,
         )
 
         print("Setting up datasets")
@@ -138,7 +145,6 @@ if __name__ == "__main__":
                 upload_callback,
                 metrics,
             ],
-            metrics=metrics,
             log_every_n_steps=50,
             limit_train_batches=None,
             limit_val_batches=1000,

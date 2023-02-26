@@ -19,18 +19,19 @@ spec:
         - name: PYTHONUNBUFFERED
           value: "1"
         args: [
-          "wandb login --relogin $(cat wandbcreds) && \
-          python main.py \
-            --batch-size=${BATCHSIZE} \ 
-            --name=gpt \
-            --num-workers=${NUMWORKERS} \
-            --context-length=${CONTEXTLENGTH} \
-            --n-layers=${NLAYERS} \
-            --n-heads=${NHEADS} \ 
-            --n-embd=${NEMBD} \
-            --accumulate-batches=${ACCUMBATCHES} \
-            --warmup=${WARMUP}"
+          "wandb login --relogin $(cat wandbcreds) && sleep 1000000"
         ]
+          # python main.py \
+          #   --batch-size=${BATCHSIZE} \ 
+          #   --name=gpt \
+          #   --num-workers=${NUMWORKERS} \
+          #   --context-length=${CONTEXTLENGTH} \
+          #   --n-layers=${NLAYERS} \
+          #   --n-heads=${NHEADS} \ 
+          #   --n-embd=${NEMBD} \
+          #   --accumulate-batches=${ACCUMBATCHES} \
+          #   --warmup=${WARMUP}"
+
         resources:
           limits:
             memory: 128Gi

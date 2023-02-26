@@ -52,7 +52,7 @@ class SampleTextGenerationCallback(ModelCallback):
 
     def _sample_output_from_prompt(self, modeltrainer: ModelTrainer, epoch: int, step: int):
         prompt = torch.zeros((1, 1), dtype=torch.long) if self.prompt is None else self.prompt
-        text = modeltrainer.model.generate(
+        text = modeltrainer.model.module.generate(
             prompt,
             max_new_tokens=self.new_tokens,
         )
@@ -87,7 +87,7 @@ class SampleTextGenerationCallback(ModelCallback):
         batch_idx: int,
     ) -> None:
         if batch_idx % self.every_n_batches == 0:
-            self._sample_output_from_prompt(modeltrainer, modeltrainer.epoch, modeltrainer.traintep)
+            self._sample_output_from_prompt(modeltrainer, modeltrainer.epoch, modeltrainer.trainstep)
 
     def on_train_epoch_end(self, modeltrainer: ModelTrainer) -> None:
         curr_epoch = modeltrainer.epoch
@@ -249,7 +249,7 @@ class WandbMetricsCallback(ModelCallback):
 
         # reset the metric classes for next epoch
         for metric in self.metrics:
-            self.epoch_metrics_container[phase][metric].reset()
+            self.phase_metrics[phase][metric].reset()
 
         curr_epoch_metrics = {f"{phase}_{metric}": self.epoch_metrics_container[phase][metric][-1] for metric in self.metrics}
 

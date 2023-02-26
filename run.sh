@@ -7,6 +7,6 @@ export LR=3e-4
 export ACCUMBATCHES=0
 export NUMWORKERS=32
 export WARMUP=0
-export NGPU=4
+export NGPU=2
 envsubst < kube.yaml | kubectl create -f -
 

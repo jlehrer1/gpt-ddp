@@ -23,6 +23,7 @@ RUN pip install 'matplotlib<3.7' \
     pandas \
     plotly \
     scipy \
+    torchmetrics \
     scikit-misc \
     datasets \
     transformers

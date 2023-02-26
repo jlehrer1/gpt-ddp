@@ -70,9 +70,9 @@ class ModelTrainer:
 
         # set up gpu for ddp training
         self.gpu_id = int(os.environ["LOCAL_RANK"])
-        self.model = nn.SyncBatchNorm.convert_sync_batchnorm(self.model)
-        self.model = model.to(self.gpu_id)
-        self.model = DistributedDataParallel(model, device_ids=[self.gpu_id])
+        self.model = nn.SyncBatchNorm.convert_sync_batchnorm(model)
+        self.model = self.model.to(self.gpu_id)
+        self.model = DistributedDataParallel(self.model, device_ids=[self.gpu_id])
 
         # track train/val step, epoch for logging
         self.trainstep = 0
@@ -103,10 +103,7 @@ class ModelTrainer:
         logits = self.model(data)
 
         B, T, C = logits.shape
-        logits = logits.view(B * T, C)
-        targets = targets.view(B * T)
-
-        loss = self.criterion(logits, targets)
+        loss = self.criterion(logits.view(B * T, C), targets.view(B * T))
         loss.backward()
 
         # if self.trainer.global_step < self.warmup_iter:
@@ -129,7 +126,8 @@ class ModelTrainer:
         targets = targets.to(self.gpu_id)
 
         logits = self.model(data)
-        loss = self.criterion(logits, targets)
+        B, T, C = logits.shape
+        loss = self.criterion(logits.view(B * T, C), targets.view(B * T))
         self.valloss.append(loss.cpu().item())
 
         if self.gpu_id == 0:
@@ -153,7 +151,7 @@ class ModelTrainer:
         if self.gpu_id == 0:
             if self.callbacks is not None:
                 for callback in self.callbacks:
-                    callback.on_training_epoch_end(self)
+                    callback.on_train_epoch_end(self)
 
         self.trainloss = []
 
@@ -163,7 +161,7 @@ class ModelTrainer:
         for i, batch in enumerate(tqdm(self.valloader)):
             if self.limit_val_batches is not None and i > self.limit_val_batches:
                 break
-            self.training_step(batch=batch, batch_idx=i)
+            self.validation_step(batch=batch, batch_idx=i)
             self.valstep += 1
 
         if self.gpu_id == 0:
