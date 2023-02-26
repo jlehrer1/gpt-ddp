@@ -1,3 +1,23 @@
+Metadata-Version: 2.1
+Name: gptddp
+Version: 0.0.1
+Summary: Library for training GPT models with PyTorch-Lightning
+Home-page: https://github.com/jlehrer1/lightning-gpt/
+Author: Julian Lehrer
+Author-email: jmlehrer@ucsc.edu
+License: MIT license
+Keywords: gptddp
+Classifier: Development Status :: 3 - Alpha
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: GNU General Public License v2 (GPLv2)
+Classifier: Natural Language :: English
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.6
+Classifier: Programming Language :: Python :: 3.7
+Classifier: Programming Language :: Python :: 3.8
+Requires-Python: >=3.9
+Description-Content-Type: text/markdown
+
 # GPT-ddp
 
 *A small library for training transformer models on multiple GPU's via distributed data parallelism.*

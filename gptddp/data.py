@@ -1,10 +1,8 @@
-import os
 from typing import Collection, Union
 
-import pytorch_lightning as pl
 import torch
 import transformers
-from torch.utils.data import DataLoader, Dataset
+from torch.utils.data import Dataset
 
 
 class AutoRegressiveTextSampler(Dataset):

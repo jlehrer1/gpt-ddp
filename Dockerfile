@@ -31,7 +31,7 @@ RUN pip install 'matplotlib<3.7' \
 COPY 'training_data.txt' .
 COPY 'validation_data.txt' .
 COPY main.py .
-COPY gptlightning gptlightning
+COPY gptddp gptddp
 
 # copy credential things
 COPY wandbcreds .

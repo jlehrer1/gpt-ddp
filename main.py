@@ -9,9 +9,9 @@ from torch.optim import Adam
 from transformers import AutoTokenizer
 
 import wandb
-from gptlightning import (AutoRegressiveTextSampler, DDPManager, GPTModel,
-                          ModelTrainer, SampleTextGenerationCallback,
-                        UploadCheckpointToS3, WandbMetricsCallback)
+from gptddp import (AutoRegressiveTextSampler, DDPManager, GPTModel,
+                    ModelTrainer, SampleTextGenerationCallback,
+                    UploadCheckpointToS3, WandbMetricsCallback)
 
 if __name__ == "__main__":
     # set up parser for command line args
@@ -93,8 +93,8 @@ if __name__ == "__main__":
                 "perplexity": tm.Perplexity(),
             },
             phases=["train", "validation"],
-            project = "Language Modeling DDP TEST",
-            name = f"{name}-heads-{n_heads}-blocks-{n_layers}-nembd-{n_embd}-accum-{accumulate_batches}-gpu-{num_devices}"
+            project="Language Modeling DDP TEST",
+            name=f"{name}-heads-{n_heads}-blocks-{n_layers}-nembd-{n_embd}-accum-{accumulate_batches}-gpu-{num_devices}",
         )
 
         sample_text_generator = SampleTextGenerationCallback(

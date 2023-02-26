@@ -1,16 +1,14 @@
 import os
 from copy import deepcopy
-from typing import *
 from typing import Any, Optional
 
 import boto3
 import numpy as np
-import pytorch_lightning as pl
 import torch
 import torchmetrics as tm
 
 import wandb
-from gptlightning.trainer import ModelTrainer
+from gptddp.trainer import ModelTrainer
 
 
 class ModelCallback:
@@ -262,7 +260,7 @@ class WandbMetricsCallback(ModelCallback):
 
     # all of these Callbacks methods should only get called on the main process by the ModelTrainer
     # so it should be safe to use wandb.log without checking it it's initialized
-    # but initialization I'm not sure, that's why we have the conditional 
+    # but initialization I'm not sure, that's why we have the conditional
     def on_train_batch_end(self, modeltrainer: ModelTrainer, batch: tuple[torch.Tensor], outputs: torch.Tensor, batch_idx: int):
         _, targets = batch
         metric_results = self.compute_step(

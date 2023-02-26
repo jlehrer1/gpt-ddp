@@ -3,17 +3,11 @@ from functools import partial
 from typing import Type, Union
 
 import torch
-import torch.multiprocessing as mp
 import torch.nn as nn
-import torch.nn.functional as F
-from torch.distributed import (barrier, destroy_process_group,
-                               init_process_group)
 from torch.nn.parallel import DistributedDataParallel
 from torch.utils.data import DataLoader, Dataset
 from torch.utils.data.distributed import DistributedSampler
 from tqdm import tqdm
-
-from gptlightning.metrics import Metrics
 
 
 class ModelTrainer:
@@ -27,7 +21,6 @@ class ModelTrainer:
         criterion: nn.Module,
         max_epochs: int,
         callbacks: list[nn.Module] = None,
-        metrics: Metrics = None,
         log_every_n_steps: int = 50,
         limit_val_batches: int = None,
         limit_train_batches: int = None,
@@ -41,7 +34,6 @@ class ModelTrainer:
 
         self.max_epochs = max_epochs
         self.callbacks = callbacks
-        self.metrics = metrics
 
         self.log_every_n_steps = log_every_n_steps
         self.limit_val_batches = limit_val_batches
@@ -99,8 +91,6 @@ class ModelTrainer:
 
         # only run callbacks on main process
         if self.gpu_id == 0:
-            if self.metrics is not None:
-                self.metrics.compute_step(phase="train", preds=logits, targets=targets, log_every_n_steps=self.log_every_n_steps)
             if self.callbacks is not None:
                 for callback in self.callbacks:
                     callback.on_train_batch_end(self, batch, logits, batch_idx)
@@ -115,10 +105,6 @@ class ModelTrainer:
         self.valloss.append(loss.cpu().item())
 
         if self.gpu_id == 0:
-            if self.metrics is not None:
-                self.metrics.compute_step(
-                    phase="validation", preds=logits, targets=targets, log_every_n_steps=self.log_every_n_steps
-                )
             if self.callbacks is not None:
                 for callback in self.callbacks:
                     callback.on_validation_batch_end(self, batch, logits, batch_idx)
@@ -134,8 +120,6 @@ class ModelTrainer:
             self.trainstep += 1
 
         if self.gpu_id == 0:
-            if self.metrics is not None:
-                self.metrics.compute_epoch("train")
             if self.callbacks is not None:
                 for callback in self.callbacks:
                     callback.on_training_epoch_end(self)
@@ -150,8 +134,6 @@ class ModelTrainer:
             self.valstep += 1
 
         if self.gpu_id == 0:
-            if self.metrics is not None:
-                self.metrics.compute_epoch("validation")
             if self.callbacks is not None:
                 for callback in self.callbacks:
                     callback.on_validation_epoch_end(self)
