@@ -1,6 +1,6 @@
 # GPT-ddp
 
-*A small library for training transformer models on multiple GPU's via distributed data parallelism.*
+*A library for training transformer models on multiple GPUs via distributed data parallelism.*
 
 To install, run
 `pip install git+https://github.com/jlehrer1/lightning-gpt`
