@@ -11,8 +11,14 @@ Library Details:
 
 - For example, the phrase "I walked to the grocery store to get bread" could be split with a context length of 8, into samples "I walked to the grocery store to get" and "walked to the grocery store to get bread". This allows us to calculate loss on correctly generating the next word.
 
-`metrics.Metrics`  
-- A wrapper for calculating metrics across batches and epochs. Accepts a dictionary with names and `torchmetrics.Metric` subclasses, and handles updating internal states + generating dictionaries for logging, finding the best epoch for different metrics etc. 
+`trainer.ModelTrainer`:  
+- A training loop wrapper for single-machine, multi-accelerator computation. Handles setting up different dataloader indices on different GPU processes, preparing the model for distributed training and running the optimization loop.
+
+`ddp_manager.DDPManager`:  
+- A context manager for initializing and tearing down the NCCL backend .
+
+`callbacks.WandbMetricsCallback`  
+- A wrapper for calculating metrics across batches and epochs. Accepts a dictionary with names and `torchmetrics.Metric` subclasses, and handles updating internal states + generating dictionaries for logging, finding the best epoch for different metrics etc. Only logs on the main process to not duplicate runs
 
 `callbacks.SampleTextGenerationCallback`
 - A PyTorch-Lightning callback for generating text samples from the model at intermediate times during training, so we can get a sense of if the text completion is good enough. Accepts an prompt to start the generation from, and parameters to control the frequency of text sampling
