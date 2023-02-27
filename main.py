@@ -21,8 +21,10 @@ from gptddp import (
 import gc
 
 if __name__ == "__main__":
+    # Flush cache at start, not sure what might be left allocated on server
     gc.collect()
     torch.cuda.empty_cache()
+
     # set up parser for command line args
     parser = argparse.ArgumentParser()
 
@@ -134,7 +136,7 @@ if __name__ == "__main__":
             n_epochs=1,
             n_steps=50000,
         )
-
+        fp16_scaler = torch.cuda.amp.GradScaler(enabled=True)
         trainer = ModelTrainer(
             model=model,
             traindata=traindata,
@@ -151,6 +153,7 @@ if __name__ == "__main__":
             log_every_n_steps=50,
             limit_train_batches=None,
             limit_val_batches=1000,
+            scaler=fp16_scaler,
         )
 
         trainer.setup_dataloaders(batch_size=batch_size, num_workers=num_workers)

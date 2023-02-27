@@ -25,6 +25,7 @@ class ModelTrainer:
         limit_val_batches: Optional[int] = None,
         limit_train_batches: Optional[int] = None,
         val_loop_every_n_steps: Optional[int] = None,
+        scaler: torch.cuda.amp.GradScaler = None,
     ) -> None:
         """Class train model using distributed data parallism.
         Handles setting up dataloaders + model layers (i.e. batchnorm)
@@ -74,6 +75,8 @@ class ModelTrainer:
         self.model = self.model.to(self.gpu_id)
         self.model = DistributedDataParallel(self.model, device_ids=[self.gpu_id])
 
+        # gradient scaler
+        self.scaler = scaler
         # track train/val step, epoch for logging
         self.trainstep = 0
         self.valstep = 0
@@ -94,24 +97,38 @@ class ModelTrainer:
         if self.lr_scheduler is not None:
             self.lr_scheduler = self.lr_scheduler(self.optimizer)
 
-    def training_step(self, batch: tuple[torch.Tensor], batch_idx: int):
-        data, targets = batch
-        data = data.to(self.gpu_id)
-        targets = targets.to(self.gpu_id)
-
-        self.optimizer.zero_grad()
+    def __compute_forward_and_loss(self, data, targets) -> float:
         logits = self.model(data)
-
         B, T, C = logits.shape
         loss = self.criterion(logits.view(B * T, C), targets.view(B * T))
-        loss.backward()
 
+        return logits, loss
+
+    def training_step(self, batch: tuple[torch.Tensor], batch_idx: int):
+        # TODO: Implement this as lr scheduler
         # if self.trainer.global_step < self.warmup_iter:
         #     lr_scale = min(1.0, float(self.trainer.global_step + 1) / self.warmup_iter)
         #     for pg in optimizer.param_groups:
         #         pg["lr"] = lr_scale * self.learning_rate
 
-        self.optimizer.step()
+        data, targets = batch
+        data = data.to(self.gpu_id)
+        targets = targets.to(self.gpu_id)
+
+        self.optimizer.zero_grad()
+
+        if self.scaler is not None:
+            with torch.cuda.amp.autocast():
+                logits, loss = self.__compute_forward_and_loss(data, targets)
+
+            self.scaler(loss).backward()
+            self.scaler.step(self.optimizer)
+            self.scaler.update()
+        else:
+            logits, loss = self.__compute_forward_and_loss(data, targets)
+            loss.backward()
+            self.optimizer.step()
+
         self.trainloss.append(loss.cpu().item())
 
         # only run callbacks on main process
@@ -125,9 +142,12 @@ class ModelTrainer:
         data = data.to(self.gpu_id)
         targets = targets.to(self.gpu_id)
 
-        logits = self.model(data)
-        B, T, C = logits.shape
-        loss = self.criterion(logits.view(B * T, C), targets.view(B * T))
+        if self.scaler is not None:
+            with torch.cuda.amp.autocast():
+                logits, loss = self.__compute_forward_and_loss(data, targets)
+        else:
+            logits, loss = self.__compute_forward_and_loss(data, targets)
+
         self.valloss.append(loss.cpu().item())
 
         if self.gpu_id == 0:
