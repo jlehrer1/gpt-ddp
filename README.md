@@ -3,7 +3,7 @@
 *A library for training transformer models on multiple GPUs via distributed data parallelism.*
 
 To install, run
-`pip install git+https://github.com/jlehrer1/lightning-gpt`
+`pip install git+https://github.com/jlehrer1/gpt-ddp`
 
 Library Details:  
 `data.AutoRegressiveTextSampler`:  
