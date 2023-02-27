@@ -19,8 +19,8 @@ spec:
         - name: PYTHONUNBUFFERED
           value: "1"
         args: [
-          "wandb login --relogin $(cat wandbcreds) && \
-          torchrun main.py \
+          "wandb login --relogin $(cat wandbcreds) && 
+          torchrun --nproc_per_node=${NGPU} main.py \
             --batch-size=${BATCHSIZE} \ 
             --name=gpt \
             --num-workers=${NUMWORKERS} \

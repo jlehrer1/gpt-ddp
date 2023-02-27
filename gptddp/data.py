@@ -64,13 +64,12 @@ class AutoRegressiveTextSampler(Dataset):
         return torch.tensor(X), torch.tensor(Y)
 
     def __recover_from_bad_sequence(self, idx: int):
-        if idx == len(self) - 1:
+        if idx == len(self):
             idx -= 1
         else:
             idx += 1
 
         return self[idx]
-
 
     def __len__(self):
         return len(self.text) - self.context_length

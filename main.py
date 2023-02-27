@@ -70,8 +70,6 @@ if __name__ == "__main__":
         num_devices = torch.cuda.device_count()
 
         print(f"Total number of CUDA devices is {num_devices}")
-        print(f"Setting up DDP on rank={rank}")
-
         print("Generating tokenizer")
         tokenizer = AutoTokenizer.from_pretrained("gpt2")
 
@@ -106,7 +104,7 @@ if __name__ == "__main__":
                 "perplexity": tm.Perplexity(),
             },
             phases=["train", "validation"],
-            project="Language Modeling DDP TEST",
+            project="Language Modeling (multi-gpu)",
             name=f"{name}-heads-{n_heads}-blocks-{n_layers}-nembd-{n_embd}-accum-{accumulate_batches}-gpu-{num_devices}",
         )
 
@@ -137,7 +135,7 @@ if __name__ == "__main__":
             n_epochs=1,
             n_steps=50000,
         )
-        fp16_scaler = torch.cuda.amp.GradScaler(enabled=True)
+        # fp16_scaler = torch.cuda.amp.GradScaler(enabled=True)
         trainer = ModelTrainer(
             model=model,
             traindata=traindata,
@@ -149,12 +147,12 @@ if __name__ == "__main__":
             callbacks=[
                 sample_text_generator,
                 upload_callback,
-                # metrics,
+                metrics,
             ],
             log_every_n_steps=50,
             limit_train_batches=None,
             limit_val_batches=1000,
-            scaler=fp16_scaler,
+            # scaler=fp16_scaler,
         )
 
         trainer.setup_dataloaders(batch_size=batch_size, num_workers=num_workers)

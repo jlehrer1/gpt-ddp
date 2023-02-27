@@ -5,6 +5,12 @@
 To install, run
 `pip install git+https://github.com/jlehrer1/gpt-ddp`
 
+To use the provided `main.py`:  
+
+Put all text you want to train on in `training_text.py`, and all text for validation in `validation_text.py`. Then to train on a single machine with multiple GPUs, run `torchrun --nproc_per_node=NUM_GPUS_YOU_HAVE main.py`.  
+
+For more detailed instructions on launching multi-node multi-gpu training, see the [torch distributed documentation](https://pytorch.org/docs/stable/distributed.html#launch-utility).
+
 Library Details:  
 `data.AutoRegressiveTextSampler`:  
 - For handling data, the class is a torch dataset subclass for sampling text sequences from a list of encoded or non-encoded data. It produces pairs of text sequences, where the second is "shifted right" by one word.
@@ -26,8 +32,6 @@ Library Details:
 `callbacks.UploadCheckpointToS3`
 - A PyTorch-Lightning callback for uploading model checkpoints to S3. Useful when training on remote clusters, and we want to save model checkpoints at intermediate times
 
-To use the provided `main.py`:
-Put all text you want to train on in `training_text.py`, and all text for validation in `validation_text.py`. Then run `torchrun main.py`.
 
 Model initialization scheme:
 As described in the README for [minGPT initialization scheme](https://github.com/karpathy/minGPT/blob/master/README.md) which are sourced from the GPT-1 and GPT-2 papers and repos, we initialize all standard linear layers + embedding with a normal dist. with mean 0 and std 0.02. All bias vectors are initialized to 0. For the forward pass in the `DecoderBlock`, we initialize the weights of the projection Linear layer in the `MultiHeadedAttention` module to be `1/sqrt(num layers)` at initialization -- effectively scaling down the attention outputs and having MLP part of the decoder contribute most during early training. 

@@ -13,12 +13,13 @@ class DDPManager:
 
     def __enter__(self):
         if self.ddp:
-            print("Setting up process groups for DDP training.")
             dist_url = "env://"  # default
             # only works with torch.distributed.launch // torch.run
-            rank = int(os.environ["RANK"])
-            world_size = int(os.environ["WORLD_SIZE"])
-            init_process_group(backend="nccl", init_method=dist_url, world_size=world_size, rank=rank)
+            self.rank = int(os.environ["RANK"])
+            self.world_size = int(os.environ["WORLD_SIZE"])
+
+            print(f"Setting up process groups for DDP training on rank {self.rank}.")
+            init_process_group(backend="nccl", init_method=dist_url, world_size=self.world_size, rank=self.rank)
 
             # synchronizes all the threads to reach this point before moving on
             barrier()
@@ -31,7 +32,7 @@ class DDPManager:
             return False
 
         if self.ddp:
-            print("Tearing down process groups for DDP training.")
+            print(f"Tearing down process groups for DDP training on rank {self.rank}.")
             destroy_process_group()
 
         return True
