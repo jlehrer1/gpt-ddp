@@ -26,9 +26,6 @@ Library Details:
 `callbacks.UploadCheckpointToS3`
 - A PyTorch-Lightning callback for uploading model checkpoints to S3. Useful when training on remote clusters, and we want to save model checkpoints at intermediate times
 
-`lightning_model.GPT`
-- The LightningModule class. The wrapper around the "GPT" model, which in this case is simply a decoder-block only (i.e. self-attention across inputs, no cross-attention to any encoded data) transformer model with a MLP head.
-
 To use the provided `main.py`:
 Put all text you want to train on in `training_text.py`, and all text for validation in `validation_text.py`. Then run `torchrun main.py`.
 
