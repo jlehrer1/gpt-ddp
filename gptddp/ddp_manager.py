@@ -1,8 +1,10 @@
 import os
-from typing import Optional, Type
-from types import TracebackType
-from torch.distributed import barrier, destroy_process_group, init_process_group
 import traceback
+from types import TracebackType
+from typing import Optional, Type
+
+from torch.distributed import (barrier, destroy_process_group,
+                               init_process_group)
 
 
 class DDPManager:

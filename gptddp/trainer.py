@@ -121,7 +121,7 @@ class ModelTrainer:
             with torch.cuda.amp.autocast():
                 logits, loss = self.__compute_forward_and_loss(data, targets)
 
-            self.scaler(loss).backward()
+            self.scaler.scale(loss).backward()
             self.scaler.step(self.optimizer)
             self.scaler.update()
         else:

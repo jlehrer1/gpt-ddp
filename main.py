@@ -1,4 +1,6 @@
 import argparse
+import gc
+import os
 from functools import partial
 
 import boto3
@@ -8,23 +10,17 @@ import torchmetrics as tm
 from torch.optim import Adam
 from transformers import AutoTokenizer
 
-import wandb
-from gptddp import (
-    AutoRegressiveTextSampler,
-    DDPManager,
-    GPTModel,
-    ModelTrainer,
-    SampleTextGenerationCallback,
-    UploadCheckpointToS3,
-    WandbMetricsCallback,
-)
-import gc
+from gptddp import (AutoRegressiveTextSampler, DDPManager, GPTModel,
+                    ModelTrainer, SampleTextGenerationCallback,
+                    UploadCheckpointToS3, WandbMetricsCallback)
+
+torch.backends.cudnn.benchmark = True
+torch.backends.cudnn.enabled = True
+
+gc.collect()
+torch.cuda.empty_cache()
 
 if __name__ == "__main__":
-    # Flush cache at start, not sure what might be left allocated on server
-    gc.collect()
-    torch.cuda.empty_cache()
-
     # set up parser for command line args
     parser = argparse.ArgumentParser()
 
@@ -70,6 +66,12 @@ if __name__ == "__main__":
     valtext = valtext.split(" ")
 
     with DDPManager():
+        rank = int(os.environ["RANK"])
+        num_devices = torch.cuda.device_count()
+
+        print(f"Total number of CUDA devices is {num_devices}")
+        print(f"Setting up DDP on rank={rank}")
+
         print("Generating tokenizer")
         tokenizer = AutoTokenizer.from_pretrained("gpt2")
 
@@ -99,7 +101,6 @@ if __name__ == "__main__":
 
         print("Setting up model")
         # set up metrics
-        num_devices = torch.cuda.device_count()
         metrics = WandbMetricsCallback(
             metrics={
                 "perplexity": tm.Perplexity(),
@@ -148,7 +149,7 @@ if __name__ == "__main__":
             callbacks=[
                 sample_text_generator,
                 upload_callback,
-                metrics,
+                # metrics,
             ],
             log_every_n_steps=50,
             limit_train_batches=None,
