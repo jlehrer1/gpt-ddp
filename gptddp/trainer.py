@@ -5,6 +5,8 @@ from typing import Optional, Type, Union
 import torch
 import torch.nn as nn
 from torch.nn.parallel import DistributedDataParallel
+from torch.optim import Optimizer
+from torch.optim.lr_scheduler import _LRScheduler
 from torch.utils.data import DataLoader, Dataset
 from torch.utils.data.distributed import DistributedSampler
 from tqdm import tqdm
@@ -16,8 +18,8 @@ class ModelTrainer:
         model: nn.Module,
         traindata: Dataset,
         valdata: Dataset,
-        optimizer: Union[Type[nn.Module], partial(nn.Module)],
-        lr_scheduler: Union[Type[nn.Module], partial(nn.Module)],
+        optimizer: Union[Type[Optimizer], partial(Optimizer)],
+        lr_scheduler: Union[Type[_LRScheduler], partial(_LRScheduler)],
         criterion: nn.Module,
         max_epochs: int,
         callbacks: Optional[list[nn.Module]] = None,
@@ -123,11 +125,15 @@ class ModelTrainer:
 
             self.scaler.scale(loss).backward()
             self.scaler.step(self.optimizer)
+            if self.lr_scheduler is not None:
+                self.scaler.step(self.lr_scheduler)
             self.scaler.update()
         else:
             logits, loss = self.__compute_forward_and_loss(data, targets)
             loss.backward()
             self.optimizer.step()
+            if self.lr_scheduler is not None:
+                self.lr_scheduler.step()
 
         self.trainloss.append(loss.cpu().item())
 

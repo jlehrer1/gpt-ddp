@@ -1,5 +1,6 @@
 from gptddp.callbacks import (SampleTextGenerationCallback,
-                              UploadCheckpointToS3, WandbMetricsCallback)
+                              UploadCheckpointToS3, WandbMetricsCallback,
+                              WarmupAndSlowDecayScheduler)
 from gptddp.data import AutoRegressiveTextSampler
 from gptddp.ddp_manager import DDPManager
 from gptddp.model import GPTModel
@@ -13,4 +14,5 @@ __all__ = [
     "ModelTrainer",
     "DDPManager",
     "GPTModel",
+    "WarmupAndSlowDecayScheduler",
 ]

@@ -1,5 +1,5 @@
-export BATCHSIZE=32
-export CONTEXTLENGTH=256
+export BATCHSIZE=16
+export CONTEXTLENGTH=128
 export NLAYERS=12
 export NHEADS=4
 export NEMBD=128

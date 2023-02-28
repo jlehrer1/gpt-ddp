@@ -3,8 +3,7 @@ import traceback
 from types import TracebackType
 from typing import Optional, Type
 
-from torch.distributed import (barrier, destroy_process_group,
-                               init_process_group)
+from torch.distributed import destroy_process_group, init_process_group
 
 
 class DDPManager:
@@ -22,7 +21,8 @@ class DDPManager:
             init_process_group(backend="nccl", init_method=dist_url, world_size=self.world_size, rank=self.rank)
 
             # synchronizes all the threads to reach this point before moving on
-            barrier()
+            # barrier is broken
+            # barrier()
 
     def __exit__(
         self, exc_type: Optional[Type[BaseException]], exc_val: Optional[BaseException], exc_tb: Optional[TracebackType]

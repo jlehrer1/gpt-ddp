@@ -12,7 +12,8 @@ from transformers import AutoTokenizer
 
 from gptddp import (AutoRegressiveTextSampler, DDPManager, GPTModel,
                     ModelTrainer, SampleTextGenerationCallback,
-                    UploadCheckpointToS3, WandbMetricsCallback)
+                    UploadCheckpointToS3, WandbMetricsCallback,
+                    WarmupAndSlowDecayScheduler)
 
 torch.backends.cudnn.benchmark = True
 torch.backends.cudnn.enabled = True
@@ -136,12 +137,23 @@ if __name__ == "__main__":
             n_steps=50000,
         )
         # fp16_scaler = torch.cuda.amp.GradScaler(enabled=True)
+
+        transformer_scheduler = partial(
+            WarmupAndSlowDecayScheduler,
+            init_lr=1e-6,
+            peak_lr=5e-3,
+            final_lr=3e-4,
+            final_lr_scale=0.05,
+            warmup_steps=4000,
+            decay_steps=70000,
+        )
+
         trainer = ModelTrainer(
             model=model,
             traindata=traindata,
             valdata=valdata,
             optimizer=partial(Adam, lr=lr),
-            lr_scheduler=None,
+            lr_scheduler=transformer_scheduler,
             criterion=nn.CrossEntropyLoss(),
             max_epochs=1,
             callbacks=[

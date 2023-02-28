@@ -1,9 +1,9 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: gpt-cl-${CONTEXTLENGTH}-layers-${NLAYERS}-heads-${NHEADS}-b-${BATCHSIZE}-lr-${LR}-acc-${ACCUMBATCHES}-warmup-${WARMUP}-gpu-${NGPU}
+  name: gpt-cl-${CONTEXTLENGTH}-layers-${NLAYERS}-heads-${NHEADS}-b-${BATCHSIZE}-lr-${LR}-acc-${ACCUMBATCHES}-gpu-${NGPU}
 spec:
-  backoffLimit: 0
+  backoffLimit: 5
   completions: 1
   template:
     metadata:
@@ -20,7 +20,7 @@ spec:
           value: "1"
         args: [
           "wandb login --relogin $(cat wandbcreds) && 
-          torchrun --nproc_per_node=${NGPU} main.py \
+            torchrun --nproc_per_node=${NGPU} main.py \
             --batch-size=${BATCHSIZE} \ 
             --name=gpt \
             --num-workers=${NUMWORKERS} \
@@ -33,11 +33,11 @@ spec:
         ]
         resources:
           limits:
-            memory: 128Gi
+            memory: 256Gi
             cpu: "32"
             nvidia.com/gpu: "${NGPU}"
           requests:
-            memory: 32Gi
+            memory: 256Gi
             cpu: "32"
             nvidia.com/gpu: "${NGPU}"
         volumeMounts:

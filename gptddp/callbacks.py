@@ -1,11 +1,13 @@
 import os
 from copy import deepcopy
-from typing import Any, Optional
+from functools import partial
+from typing import Any, Optional, Type, Union
 
 import boto3
 import numpy as np
 import torch
 import torchmetrics as tm
+from torch.optim.lr_scheduler import _LRScheduler
 
 import wandb
 from gptddp.trainer import ModelTrainer
@@ -206,13 +208,24 @@ class WandbMetricsCallback(ModelCallback):
         self.metrics = metrics
         self.phases = phases
 
-        self.phase_metrics = {
-            phase: {name: deepcopy(metric).to(self.gpu_id) for name, metric in self.metrics.items()} for phase in self.phases
-        }
+        self.phase_metrics = None
+        self.step_metrics_container = None
+        self.epoch_metrics_container = None
 
-        self.step_metrics_container = {phase: {name: 0 for name in self.metrics} for phase in self.phases}
-
-        self.epoch_metrics_container = {phase: {name: [] for name in self.metrics} for phase in self.phases}
+        try:
+            self.phase_metrics = {
+                phase: {name: deepcopy(metric).to(self.gpu_id) for name, metric in self.metrics.items()} for phase in self.phases
+            }
+            self.step_metrics_container = {phase: {name: 0 for name in self.metrics} for phase in self.phases}
+            self.epoch_metrics_container = {phase: {name: [] for name in self.metrics} for phase in self.phases}
+        except RuntimeError as r:
+            if "invalid device ordinal" in str(r).lower():
+                print(
+                    f"Error. The {self.__class__.__name__} class expected more GPUs than are actually available. In order to not stop your job, we'll continue to log loss only."
+                )
+        except Exception as ex:
+            name, args = type(ex).__name__, ex.args
+            print(f"Found {name} error in {self.__class__.__name__} with args {args}. Trying to continue.")
 
     def compute_step(self, phase: str, preds: torch.Tensor, targets: torch.Tensor) -> Optional[dict[str, Any]]:
         """Calculates all metrics and logs them to wandb
@@ -227,17 +240,18 @@ class WandbMetricsCallback(ModelCallback):
         :rtype: Optional[dict[str, Any]]
         """
         assert phase in self.phases, f"Phase {phase} not in phases set at initiliazation"
-        curr_step_metrics = None
+        curr_step_metrics = {}
 
-        # calculate metric no matter what to update internal state
-        for metric in self.metrics:
-            try:
-                r = self.phase_metrics[phase][metric](preds, targets).item()
-                self.step_metrics_container[phase][metric] = r
-            except AttributeError:
-                self.silentprint(f"Metric {metric} did not return a float, not logging and continuing...")
+        if self.phase_metrics is not None:
+            # calculate metric no matter what to update internal state
+            for metric in self.metrics:
+                try:
+                    r = self.phase_metrics[phase][metric](preds, targets).item()
+                    self.step_metrics_container[phase][metric] = r
+                except AttributeError:
+                    self.silentprint(f"Metric {metric} did not return a float, not logging and continuing...")
 
-        curr_step_metrics = {f"{phase}_{metric}": self.step_metrics_container[phase][metric] for metric in self.metrics}
+            curr_step_metrics = {f"{phase}_{metric}": self.step_metrics_container[phase][metric] for metric in self.metrics}
 
         return curr_step_metrics
 
@@ -250,18 +264,20 @@ class WandbMetricsCallback(ModelCallback):
         :rtype: dict[str, float]
         """
         # store epoch metrics for "best metric" logging
-        for metric in self.metrics:
-            try:
-                r = self.phase_metrics[phase][metric].compute().item()
-                self.epoch_metrics_container[phase][metric].append(r)
-            except AttributeError:  # if .item() is not valid since metric doesnt return a 0dim tensor
-                self.silentprint(f"Metric {metric} did not return a float, not logging and continuing...")
+        curr_epoch_metrics = {}
+        if self.phase_metrics is not None:
+            for metric in self.metrics:
+                try:
+                    r = self.phase_metrics[phase][metric].compute().item()
+                    self.epoch_metrics_container[phase][metric].append(r)
+                except AttributeError:  # if .item() is not valid since metric doesnt return a 0dim tensor
+                    self.silentprint(f"Metric {metric} did not return a float, not logging and continuing...")
 
-        # reset the metric classes for next epoch
-        for metric in self.metrics:
-            self.phase_metrics[phase][metric].reset()
+            # reset the metric classes for next epoch
+            for metric in self.metrics:
+                self.phase_metrics[phase][metric].reset()
 
-        curr_epoch_metrics = {f"{phase}_{metric}": self.epoch_metrics_container[phase][metric][-1] for metric in self.metrics}
+            curr_epoch_metrics = {f"{phase}_{metric}": self.epoch_metrics_container[phase][metric][-1] for metric in self.metrics}
 
         return curr_epoch_metrics
 
@@ -312,3 +328,64 @@ class WandbMetricsCallback(ModelCallback):
         metric_results["validation_loss"] = np.mean(modeltrainer.valloss)
         metric_results["epoch"] = modeltrainer.epoch
         wandb.log(metric_results)
+
+
+class WarmupAndSlowDecayScheduler(_LRScheduler):
+    def __init__(
+        self,
+        optimizer: Union[Type[torch.optim.Optimizer], partial(torch.optim.Optimizer)],
+        init_lr: float,
+        peak_lr: float,
+        final_lr: float,
+        final_lr_scale: float,
+        warmup_steps: int,
+        decay_steps: int,
+    ) -> None:
+        """LR scheduler
+
+        optimizer (Optimizer): Optimizer.
+        init_lr (float): Initial learning rate.
+        peak_lr (float): Maximum learning rate.
+        final_lr (float): Final learning rate.
+        final_lr_scale (float): Final learning rate scale
+        warmup_steps (int): Warmup the learning rate linearly for the first N updates
+        decay_steps (int): Steps in decay stages
+        """
+        self.optimizer = optimizer
+        self.final_lr = final_lr
+        self.peak_lr = peak_lr
+        self.warmup_steps = warmup_steps
+        self.decay_steps = decay_steps
+
+        self.warmup_rate = self.peak_lr / self.warmup_steps
+        self.decay_factor = -np.log(final_lr_scale) / self.decay_steps
+
+        self.init_lr = init_lr
+        self.update_steps = 0
+
+    def _decide_stage(self) -> tuple[int, Optional[int]]:
+        if self.update_steps < self.warmup_steps:
+            return 0, self.update_steps
+
+        if self.warmup_steps <= self.update_steps < self.warmup_steps + self.decay_steps:
+            return 1, self.update_steps - self.warmup_steps
+
+        return 2, None
+
+    def step(self, val_loss: Optional[torch.FloatTensor] = None) -> float:
+        self.update_steps += 1
+        stage, steps_in_stage = self._decide_stage()
+
+        if stage == 0:
+            self.lr = self.update_steps * self.warmup_rate
+        elif stage == 1:
+            self.lr = self.peak_lr * np.exp(-self.decay_factor * steps_in_stage)
+        elif stage == 2:
+            self.lr = self.final_lr
+        else:
+            raise ValueError("Undefined stage")
+
+        for g in self.optimizer.param_groups:
+            g["lr"] = self.lr
+
+        return self.lr

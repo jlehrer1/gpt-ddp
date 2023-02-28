@@ -1,6 +1,7 @@
 from typing import Collection, Union
 
 import torch
+import torch.nn.functional as F
 import transformers
 from torch.utils.data import Dataset
 
@@ -11,7 +12,7 @@ class AutoRegressiveTextSampler(Dataset):
         text: Union[Collection[str], Collection[int]],
         context_length: int,
         tokenizer: transformers.PreTrainedTokenizer = None,
-        padding: int = 2,
+        padding: int = 10,
     ):
         """Creates a dataset object for generating pairs of text
         for training autoregressive lanuage models. The __getitem__
@@ -53,23 +54,18 @@ class AutoRegressiveTextSampler(Dataset):
         else:
             data = self.text[idx : idx + self.context_length + self.padding]
 
-        X = encoded[0 : self.context_length]
-        Y = encoded[1 : self.context_length + 1]
+        X = torch.tensor(encoded[0 : self.context_length])
+        Y = torch.tensor(encoded[1 : self.context_length + 1])
 
-        # a bit hacky, but saves us if tokenized input isn't long enough
-        # we might repeated samples occasionally, it's alright
-        if len(X) != self.context_length or len(Y) != self.context_length:
-            return self.__recover_from_bad_sequence(idx)
+        # saves us if tokenized input isn't long enough by padding zeros
+        # since we didn't introduce a padding token
+        if len(X) != self.context_length:
+            X = F.pad(X, pad=(0, self.context_length - len(X)), value=0)
 
-        return torch.tensor(X), torch.tensor(Y)
+        if len(Y) != self.context_length:
+            Y = F.pad(Y, pad=(0, self.context_length - len(Y)), value=0)
 
-    def __recover_from_bad_sequence(self, idx: int):
-        if idx == len(self):
-            idx -= 1
-        else:
-            idx += 1
-
-        return self[idx]
+        return X, Y
 
     def __len__(self):
-        return len(self.text) - self.context_length
+        return len(self.text) - (self.context_length + self.padding)
