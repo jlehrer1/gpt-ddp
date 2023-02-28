@@ -107,12 +107,6 @@ class ModelTrainer:
         return logits, loss
 
     def training_step(self, batch: tuple[torch.Tensor], batch_idx: int):
-        # TODO: Implement this as lr scheduler
-        # if self.trainer.global_step < self.warmup_iter:
-        #     lr_scale = min(1.0, float(self.trainer.global_step + 1) / self.warmup_iter)
-        #     for pg in optimizer.param_groups:
-        #         pg["lr"] = lr_scale * self.learning_rate
-
         data, targets = batch
         data = data.to(self.gpu_id)
         targets = targets.to(self.gpu_id)
