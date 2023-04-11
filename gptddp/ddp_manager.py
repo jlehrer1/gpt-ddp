@@ -7,6 +7,9 @@ from torch.distributed import destroy_process_group, init_process_group
 
 
 class DDPManager:
+    """
+    Context manager for setting up and tearing down DDP process groups.
+    """
     def __init__(self, ddp: bool = True) -> None:
         self.ddp = ddp
 
@@ -19,10 +22,6 @@ class DDPManager:
 
             print(f"Setting up process groups for DDP training on rank {self.rank}.")
             init_process_group(backend="nccl", init_method=dist_url, world_size=self.world_size, rank=self.rank)
-
-            # synchronizes all the threads to reach this point before moving on
-            # barrier is broken
-            # barrier()
 
     def __exit__(
         self, exc_type: Optional[Type[BaseException]], exc_val: Optional[BaseException], exc_tb: Optional[TracebackType]

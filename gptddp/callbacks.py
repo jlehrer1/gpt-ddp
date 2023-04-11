@@ -107,14 +107,7 @@ class SampleTextGenerationCallback(ModelCallback):
 
 class UploadCheckpointToS3(ModelCallback):
     """Custom PyTorch callback for uploading model checkpoints to a s3_resource bucket using a boto3
-    resource object.
-
-    Parameters:
-    path: Local path to folder where model checkpoints are saved
-    desc: Description of checkpoint that is appended to checkpoint file name on save
-    upload_prefix: Path in bucket/ to upload model checkpoints to, defaults to model_checkpoints
-    """
-
+    resource object."""
     def __init__(
         self,
         path: str,
@@ -126,6 +119,18 @@ class UploadCheckpointToS3(ModelCallback):
         n_steps: int = None,
         quiet: bool = False,
     ) -> None:
+        """
+        Callback for uploading model checkpoints to s3_resource bucket.
+
+        :param path: Local path to folder where model checkpoints are saved
+        :param desc: Description of checkpoint that is appended to checkpoint file name on save
+        :param s3_resource: boto3 resource object for s3_resource
+        :param bucket: Name of s3_resource bucket to upload checkpoints to
+        :param upload_prefix: Path in bucket/ to upload model checkpoints to, defaults to model_checkpoints
+        :param n_epochs: Save checkpoint every n epochs
+        :param n_steps: Save checkpoint every n steps
+        :param quiet: Whether to print intermediate messages to stdout
+        """
         super().__init__(quiet=quiet)
         self.path = path
         self.desc = desc
@@ -331,6 +336,9 @@ class WandbMetricsCallback(ModelCallback):
 
 
 class WarmupAndSlowDecayScheduler(_LRScheduler):
+    # Write a learning rate scheduler that uses the warmup and slow decay
+    # scheduler from the original GPT paper
+    # https://arxiv.org/pdf/2002.04745.pdf
     def __init__(
         self,
         optimizer: Union[Type[torch.optim.Optimizer], partial(torch.optim.Optimizer)],

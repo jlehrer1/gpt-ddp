@@ -72,6 +72,7 @@ class ModelTrainer:
         self.val_loop_every_n_steps = val_loop_every_n_steps
 
         # set up gpu for ddp training
+
         self.gpu_id = int(os.environ["LOCAL_RANK"])
         self.model = nn.SyncBatchNorm.convert_sync_batchnorm(model)
         self.model = self.model.to(self.gpu_id)
@@ -99,14 +100,29 @@ class ModelTrainer:
         if self.lr_scheduler is not None:
             self.lr_scheduler = self.lr_scheduler(self.optimizer)
 
-    def __compute_forward_and_loss(self, data, targets) -> float:
+    def __compute_forward_and_loss(self, data: torch.Tensor, targets: torch.Tensor) -> float:
+        """
+        Compute forward pass and loss
+        :param data: input data
+        :type data: torch.Tensor
+        :param targets: target data
+        :type targets: torch.Tensor
+        :return: loss
+        """
         logits = self.model(data)
         B, T, C = logits.shape
         loss = self.criterion(logits.view(B * T, C), targets.view(B * T))
 
         return logits, loss
 
-    def training_step(self, batch: tuple[torch.Tensor], batch_idx: int):
+    def training_step(self, batch: tuple[torch.Tensor], batch_idx: int) -> None:
+        """
+        Training step for DDP training
+        :param batch: tuple of data, targets
+        :type batch: tuple[torch.Tensor]
+        :param batch_idx: index of batch
+        :type batch_idx: int
+        """
         data, targets = batch
         data = data.to(self.gpu_id)
         targets = targets.to(self.gpu_id)
@@ -114,9 +130,11 @@ class ModelTrainer:
         self.optimizer.zero_grad()
 
         if self.scaler is not None:
+            # use autocast to allow mixed precision training
             with torch.cuda.amp.autocast():
                 logits, loss = self.__compute_forward_and_loss(data, targets)
 
+            # scale loss and backprop
             self.scaler.scale(loss).backward()
             self.scaler.step(self.optimizer)
             if self.lr_scheduler is not None:
@@ -138,6 +156,13 @@ class ModelTrainer:
                     callback.on_train_batch_end(self, batch, logits, batch_idx)
 
     def validation_step(self, batch: tuple[torch.Tensor], batch_idx: int):
+        """
+        Validation step for DDP training
+        :param batch: tuple of data, targets
+        :type batch: tuple[torch.Tensor]
+        :param batch_idx: index of batch
+        :type batch_idx: int
+        """
         data, targets = batch
         data = data.to(self.gpu_id)
         targets = targets.to(self.gpu_id)

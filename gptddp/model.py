@@ -4,7 +4,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-
+from tqdm import tqdm
 
 class SelfAttentionHead(nn.Module):
     def __init__(
@@ -15,9 +15,12 @@ class SelfAttentionHead(nn.Module):
     ) -> None:
         super().__init__()
 
-        self.key = nn.Linear(n_embd, head_size, bias=False)
-        self.query = nn.Linear(n_embd, head_size, bias=False)
-        self.value = nn.Linear(n_embd, head_size, bias=False)
+        # change this to use one linear layer
+        # and then reshape the output78
+        # this is just for clarity
+        self.key = nn.Linear(n_embd, head_size, bias=False) # W_k
+        self.query = nn.Linear(n_embd, head_size, bias=False) # W_q
+        self.value = nn.Linear(n_embd, head_size, bias=False) # W_v
 
         # dont register as attribute / in gradient graph
         self.register_buffer(
@@ -125,15 +128,15 @@ class GPTModel(nn.Module):
         tokenizer=None,
     ) -> None:
         super().__init__()
-        self.vocab_size = vocab_size
+        self.vocab_size = vocab_size 
         self.n_layers = n_layers
         self.n_heads = n_heads
         self.n_embd = n_embd
         self.context_length = context_length
 
-        self.token_embedding = nn.Embedding(vocab_size, n_embd)
-        self.positional_embedding = nn.Embedding(context_length, n_embd)
-        self.blocks = nn.Sequential(
+        self.token_embedding = nn.Embedding(vocab_size, n_embd) # W_e
+        self.positional_embedding = nn.Embedding(context_length, n_embd) # W_p
+        self.blocks = nn.Sequential( 
             *[
                 DecoderBlock(
                     n_embd=n_embd,
@@ -148,7 +151,7 @@ class GPTModel(nn.Module):
         self.head = nn.Linear(n_embd, vocab_size)
         self.tokenizer = tokenizer
 
-        self.apply(self.standard_initialize)
+        self.apply(self.standard_initialize)    
         self.specialized_initialize()
 
     def standard_initialize(self, module: Union[nn.Linear, nn.Embedding, nn.LayerNorm]) -> None:
@@ -181,10 +184,13 @@ class GPTModel(nn.Module):
                 torch.nn.init.normal_(param, mean=0.0, std=0.02 / np.sqrt(2 * self.n_layers))
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        :param x: A tensor of tokens of shape (B, T)
+        :return: A tensor of logits of shape (B, T, vocab_size)
+        """
         _, T = x.shape
 
         tok_emb = self.token_embedding(x)
-        # maybe dont need unsqueeze but I don't know broadcasting
         pos_emb = self.positional_embedding(torch.arange(T).unsqueeze(0).to(x.device))
         x = tok_emb + pos_emb
         x = self.blocks(x)
@@ -196,7 +202,16 @@ class GPTModel(nn.Module):
     @torch.no_grad()
     def generate(
         self, prompt: Union[torch.Tensor, str], max_new_tokens: int, temperature: float = 0.8, sample_tokens: bool = False
-    ):
+    ) -> str:
+        """
+        Generates new tokens given a prompt. If the prompt is a string, it will be tokenized using the tokenizer
+
+        :param prompt: A string or tensor of tokens
+        :param max_new_tokens: The maximum number of tokens to generate
+        :param temperature: The temperature to use for sampling. Higher values will result in more diverse outputs
+        :param sample_tokens: Whether to sample tokens or take the argmax
+        :return: A string of tokens
+        """
         if not torch.is_tensor(prompt):
             try:
                 # cast to tensor and make a batch dim
@@ -214,14 +229,12 @@ class GPTModel(nn.Module):
         curr_device = next(self.parameters()).device
         prompt = prompt.to(curr_device)
 
-        # Move model to eval() mode if needed
-        # and cache state to set it back after generating tokens
         was_training = False
         if self.training:
             was_training = True
             self.eval()
 
-        for _ in range(max_new_tokens):
+        for _ in tqdm(range(max_new_tokens)):
             prompt_cond = prompt[:, -self.context_length :]
             logits = self(prompt_cond)
 
@@ -237,7 +250,6 @@ class GPTModel(nn.Module):
             prompt = torch.cat((prompt, prompt_next), dim=1)  # (1, T+1)
 
         if self.tokenizer is not None:
-            # remove the batch dim for decoding
             prompt = self.tokenizer.decode(prompt.cpu().squeeze())
 
         if was_training:

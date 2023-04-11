@@ -1,7 +1,7 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: gpt-cl-${CONTEXTLENGTH}-layers-${NLAYERS}-heads-${NHEADS}-b-${BATCHSIZE}-lr-${LR}-acc-${ACCUMBATCHES}-gpu-${NGPU}
+  name: gpt-warmup-cl-${CONTEXTLENGTH}-layers-${NLAYERS}-heads-${NHEADS}-b-${BATCHSIZE}-lr-${LR}-acc-${ACCUMBATCHES}-gpu-${NGPU}
 spec:
   backoffLimit: 5
   completions: 1
@@ -22,7 +22,7 @@ spec:
           "wandb login --relogin $(cat wandbcreds) && 
             torchrun --nproc_per_node=${NGPU} main.py \
             --batch-size=${BATCHSIZE} \ 
-            --name=gpt \
+            --name=gpt-with-warmup \
             --num-workers=${NUMWORKERS} \
             --context-length=${CONTEXTLENGTH} \
             --n-layers=${NLAYERS} \
